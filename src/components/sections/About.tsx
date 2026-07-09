@@ -2,11 +2,10 @@ import React from "react";
 import Tilt from "react-parallax-tilt";
 import { motion } from "framer-motion";
 
-import { services } from "../../constants";
 import { SectionWrapper } from "../../hoc";
 import { fadeIn } from "../../utils/motion";
-import { config } from "../../constants/config";
 import { Header } from "../atoms/Header";
+import { usePortfolio } from "../../context/PortfolioContext";
 
 interface IServiceCard {
   index: number;
@@ -30,7 +29,7 @@ const ServiceCard: React.FC<IServiceCard> = ({ index, title, icon }) => (
         <div className="bg-tertiary flex min-h-[280px] flex-col items-center justify-evenly rounded-[20px] px-12 py-5">
           <img
             src={icon}
-            alt="web-development"
+            alt={title}
             className="h-16 w-16 object-contain"
           />
 
@@ -44,6 +43,9 @@ const ServiceCard: React.FC<IServiceCard> = ({ index, title, icon }) => (
 );
 
 const About = () => {
+  const { data } = usePortfolio();
+  const { config, services } = data;
+
   return (
     <>
       <Header useMotion={true} {...config.sections.about} />
@@ -55,11 +57,13 @@ const About = () => {
         {config.sections.about.content}
       </motion.p>
 
-      <div className="mt-20 flex flex-wrap gap-10 max-sm:justify-center">
-        {services.map((service, index) => (
-          <ServiceCard key={service.title} index={index} {...service} />
-        ))}
-      </div>
+      {services.length > 0 && (
+        <div className="mt-20 flex flex-wrap gap-10 max-sm:justify-center">
+          {services.map((service, index) => (
+            <ServiceCard key={`${service.title}-${index}`} index={index} {...service} />
+          ))}
+        </div>
+      )}
     </>
   );
 };

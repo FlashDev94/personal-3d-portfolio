@@ -6,11 +6,10 @@ import {
 
 import "react-vertical-timeline-component/style.min.css";
 
-import { experiences } from "../../constants";
 import { SectionWrapper } from "../../hoc";
 import { Header } from "../atoms/Header";
 import { TExperience } from "../../types";
-import { config } from "../../constants/config";
+import { usePortfolio } from "../../context/PortfolioContext";
 
 const ExperienceCard: React.FC<TExperience> = (experience) => {
   return (
@@ -57,16 +56,25 @@ const ExperienceCard: React.FC<TExperience> = (experience) => {
 };
 
 const Experience = () => {
+  const { data } = usePortfolio();
+  const { config, experiences } = data;
+
   return (
     <>
       <Header useMotion={true} {...config.sections.experience} />
 
       <div className="mt-20 flex flex-col">
-        <VerticalTimeline>
-          {experiences.map((experience, index) => (
-            <ExperienceCard key={index} {...experience} />
-          ))}
-        </VerticalTimeline>
+        {experiences.length === 0 ? (
+          <p className="text-secondary text-center text-[16px]">
+            No experience added yet. Open Customize to add roles or upload a resume.
+          </p>
+        ) : (
+          <VerticalTimeline>
+            {experiences.map((experience, index) => (
+              <ExperienceCard key={index} {...experience} />
+            ))}
+          </VerticalTimeline>
+        )}
       </div>
     </>
   );

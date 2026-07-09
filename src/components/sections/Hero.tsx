@@ -2,11 +2,16 @@ import { motion } from "framer-motion";
 
 import { styles } from "../../constants/styles";
 import { ComputersCanvas } from "../canvas";
-import { config } from "../../constants/config";
+import { usePortfolio } from "../../context/PortfolioContext";
 
 const Hero = () => {
+  const { data } = usePortfolio();
+  const { config } = data;
+  const line1 = config.hero.p[0] || "";
+  const line2 = config.hero.p[1] || "";
+
   return (
-    <section className={`relative mx-auto h-screen w-full`}>
+    <section className="relative mx-auto h-screen w-full">
       <div
         className={`absolute inset-0 top-[120px] mx-auto max-w-7xl ${styles.paddingX} flex flex-row items-start gap-5`}
       >
@@ -15,13 +20,22 @@ const Hero = () => {
           <div className="violet-gradient h-40 w-1 sm:h-80" />
         </div>
 
-        <div>
+        {/* Constrain width so long resume-derived lines don't collide with the 3D scene */}
+        <div className="max-w-xl lg:max-w-2xl">
           <h1 className={`${styles.heroHeadText} text-white`}>
-            Hi, I'm <span className="text-[#915EFF]">{config.hero.name}</span>
+            Hi, I&apos;m{" "}
+            <span className="text-[#915EFF] break-words">{config.hero.name}</span>
           </h1>
-          <p className={`${styles.heroSubText} text-white-100 mt-2`}>
-            {config.hero.p[0]} <br className="hidden sm:block" />
-            {config.hero.p[1]}
+          <p
+            className={`${styles.heroSubText} text-white-100 mt-2 max-w-lg break-words`}
+          >
+            {line1}
+            {line2 ? (
+              <>
+                <br className="hidden sm:block" />
+                <span className="sm:ml-0"> {line2}</span>
+              </>
+            ) : null}
           </p>
         </div>
       </div>

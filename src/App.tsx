@@ -11,15 +11,19 @@ import {
   Works,
   StarsCanvas,
 } from "./components";
-import { useEffect } from "react";
-import { config } from "./constants/config";
+import { PortfolioProvider, usePortfolio } from "./context/PortfolioContext";
+import PortfolioConfigurator from "./components/configurator/PortfolioConfigurator";
 
-const App = () => {
-  useEffect(() => {
-    if (document.title !== config.html.title) {
-      document.title = config.html.title;
-    }
-  }, []);
+const PortfolioShell = () => {
+  const { data, isHydrated } = usePortfolio();
+
+  if (!isHydrated) {
+    return (
+      <div className="bg-primary flex min-h-screen items-center justify-center text-white">
+        Loading portfolio…
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
@@ -32,13 +36,22 @@ const App = () => {
         <Experience />
         <Tech />
         <Works />
-        <Feedbacks />
+        {data.testimonials.length > 0 && <Feedbacks />}
         <div className="relative z-0">
           <Contact />
           <StarsCanvas />
         </div>
+        <PortfolioConfigurator />
       </div>
     </BrowserRouter>
+  );
+};
+
+const App = () => {
+  return (
+    <PortfolioProvider>
+      <PortfolioShell />
+    </PortfolioProvider>
   );
 };
 
