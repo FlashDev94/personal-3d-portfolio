@@ -13,6 +13,8 @@ import {
 } from "./components";
 import { PortfolioProvider, usePortfolio } from "./context/PortfolioContext";
 import PortfolioConfigurator from "./components/configurator/PortfolioConfigurator";
+import ErrorBoundary from "./components/layout/ErrorBoundary";
+import herobg from "./assets/herobg.png";
 
 const PortfolioShell = () => {
   const { data, isHydrated } = usePortfolio();
@@ -27,8 +29,11 @@ const PortfolioShell = () => {
 
   return (
     <BrowserRouter>
-      <div className="bg-primary relative z-0">
-        <div className="bg-hero-pattern bg-cover bg-center bg-no-repeat">
+      <div className="bg-primary relative z-0 min-h-screen">
+        <div
+          className="bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url(${herobg})` }}
+        >
           <Navbar />
           <Hero />
         </div>
@@ -39,7 +44,12 @@ const PortfolioShell = () => {
         {data.testimonials.length > 0 && <Feedbacks />}
         <div className="relative z-0">
           <Contact />
-          <StarsCanvas />
+          <ErrorBoundary
+            name="Stars"
+            fallback={<div className="absolute inset-0" aria-hidden />}
+          >
+            <StarsCanvas />
+          </ErrorBoundary>
         </div>
         <PortfolioConfigurator />
       </div>
@@ -49,9 +59,28 @@ const PortfolioShell = () => {
 
 const App = () => {
   return (
-    <PortfolioProvider>
-      <PortfolioShell />
-    </PortfolioProvider>
+    <ErrorBoundary
+      name="App"
+      fallback={
+        <div className="bg-primary flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center text-white">
+          <p className="text-lg font-semibold">Something went wrong loading the portfolio.</p>
+          <p className="text-sm text-secondary">
+            Try a hard refresh. If it persists, clear site data for this origin.
+          </p>
+          <button
+            type="button"
+            className="rounded-xl bg-[#915EFF] px-4 py-2 text-sm font-semibold"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      }
+    >
+      <PortfolioProvider>
+        <PortfolioShell />
+      </PortfolioProvider>
+    </ErrorBoundary>
   );
 };
 
