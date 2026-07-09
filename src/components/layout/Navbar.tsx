@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { styles } from "../../constants/styles";
-import { navLinks } from "../../constants";
 import { logo, menu, close } from "../../assets";
-import { config } from "../../constants/config";
+import { usePortfolio } from "../../context/PortfolioContext";
 
 const Navbar = () => {
+  const { data } = usePortfolio();
+  const { config, navLinks } = data;
   const [active, setActive] = useState<string | null>();
   const [toggle, setToggle] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -29,7 +30,7 @@ const Navbar = () => {
 
       sections.forEach((current) => {
         const sectionId = current.getAttribute("id");
-        // @ts-ignore
+        // @ts-expect-error offsetHeight exists on HTMLElement
         const sectionHeight = current.offsetHeight;
         const sectionTop =
           current.getBoundingClientRect().top - sectionHeight * 0.2;
@@ -65,8 +66,8 @@ const Navbar = () => {
           }}
         >
           <img src={logo} alt="logo" className="h-9 w-9 object-contain" />
-          <p className="flex cursor-pointer text-[18px] font-bold text-white ">
-            {config.html.title}
+          <p className="max-w-[12rem] cursor-pointer truncate text-[18px] font-bold text-white sm:max-w-xs">
+            {config.html.fullName || config.html.title}
           </p>
         </Link>
 

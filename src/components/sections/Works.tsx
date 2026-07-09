@@ -3,11 +3,10 @@ import { motion } from "framer-motion";
 
 import { github } from "../../assets";
 import { SectionWrapper } from "../../hoc";
-import { projects } from "../../constants";
 import { fadeIn } from "../../utils/motion";
-import { config } from "../../constants/config";
 import { Header } from "../atoms/Header";
 import { TProject } from "../../types";
+import { usePortfolio } from "../../context/PortfolioContext";
 
 const ProjectCard: React.FC<{ index: number } & TProject> = ({
   index,
@@ -64,6 +63,9 @@ const ProjectCard: React.FC<{ index: number } & TProject> = ({
 };
 
 const Works = () => {
+  const { data } = usePortfolio();
+  const { config, projects } = data;
+
   return (
     <>
       <Header useMotion={true} {...config.sections.works} />
