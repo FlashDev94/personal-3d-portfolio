@@ -1,30 +1,53 @@
-import { useState, useRef, Suspense } from "react";
+import React, { useMemo, useRef, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Points, PointMaterial, Preload } from "@react-three/drei";
 import { random } from "maath";
-import { TypedArray } from "three";
+import type { Points as ThreePoints } from "three";
+
 import ErrorBoundary from "../layout/ErrorBoundary";
 
-const Stars = (props: any) => {
-  const ref = useRef<THREE.Points>();
-  // Length must be divisible by 3 (xyz). Keep count modest for performance.
-  const [sphere] = useState<TypedArray>(() =>
-    random.inSphere(new Float32Array(1500 * 3), { radius: 1.2 })
-  );
+export type StarsCanvasProps = {
+  color?: string;
+  particleCount?: number;
+  motionSpeed?: number;
+  animate?: boolean;
+  dpr?: [number, number];
+};
+
+const Stars = ({
+  color = "#f272c8",
+  particleCount = 1500,
+  motionSpeed = 1,
+  animate = true,
+}: {
+  color?: string;
+  particleCount?: number;
+  motionSpeed?: number;
+  animate?: boolean;
+}) => {
+  const ref = useRef<ThreePoints>(null);
+
+  // Length must be divisible by 3 (xyz). Clamp for performance.
+  const count = Math.max(200, Math.min(4000, Math.round(particleCount)));
+  const sphere = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    random.inSphere(arr, { radius: 1.2 });
+    return arr;
+  }, [count]);
 
   useFrame((_state, delta) => {
-    if (ref.current) {
-      ref.current.rotation.x -= delta / 10;
-      ref.current.rotation.y -= delta / 15;
-    }
+    if (!animate || !ref.current) return;
+    const s = motionSpeed || 1;
+    ref.current.rotation.x -= (delta / 10) * s;
+    ref.current.rotation.y -= (delta / 15) * s;
   });
 
   return (
     <group rotation={[0, 0, Math.PI / 4]}>
-      <Points ref={ref} positions={sphere} stride={3} frustumCulled {...props}>
+      <Points ref={ref} positions={sphere} stride={3} frustumCulled>
         <PointMaterial
           transparent
-          color="#f272c8"
+          color={color}
           size={0.002}
           sizeAttenuation={true}
           depthWrite={false}
@@ -34,7 +57,13 @@ const Stars = (props: any) => {
   );
 };
 
-const StarsCanvas = () => {
+const StarsCanvas: React.FC<StarsCanvasProps> = ({
+  color = "#f272c8",
+  particleCount = 1500,
+  motionSpeed = 1,
+  animate = true,
+  dpr = [1, 1.5],
+}) => {
   return (
     <ErrorBoundary
       name="Stars"
@@ -43,7 +72,8 @@ const StarsCanvas = () => {
       <div className="absolute inset-0 z-[-1] h-auto w-full">
         <Canvas
           camera={{ position: [0, 0, 1] }}
-          dpr={[1, 1.5]}
+          frameloop={animate ? "always" : "demand"}
+          dpr={dpr}
           gl={{
             antialias: false,
             alpha: true,
@@ -56,7 +86,12 @@ const StarsCanvas = () => {
           }}
         >
           <Suspense fallback={null}>
-            <Stars />
+            <Stars
+              color={color}
+              particleCount={particleCount}
+              motionSpeed={motionSpeed}
+              animate={animate}
+            />
           </Suspense>
           <Preload all />
         </Canvas>
