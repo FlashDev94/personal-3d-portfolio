@@ -33,7 +33,7 @@ const ServiceCard: React.FC<IServiceCard> = ({ index, title, icon }) => (
             className="h-16 w-16 object-contain"
           />
 
-          <h3 className="text-center text-[20px] font-bold text-white">
+          <h3 className="text-center text-[20px] font-bold text-fg">
             {title}
           </h3>
         </div>

@@ -1,5 +1,6 @@
 import { SectionWrapper } from "../../hoc";
 import { usePortfolio } from "../../context/PortfolioContext";
+import { useThemeRuntime } from "../../utils/themeRuntime";
 
 /**
  * Skill icons as CSS “balls” instead of one WebGL <Canvas> per skill.
@@ -9,6 +10,8 @@ import { usePortfolio } from "../../context/PortfolioContext";
 const Tech = () => {
   const { data } = usePortfolio();
   const { technologies } = data;
+  const runtime = useThemeRuntime(data.theme3d);
+  const accent = runtime.palette.accent;
 
   if (!technologies.length) return null;
 
@@ -21,10 +24,21 @@ const Tech = () => {
           title={technology.name}
         >
           <div
-            className="flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-tertiary shadow-card transition duration-300 group-hover:-translate-y-1 group-hover:border-[#915EFF]/50 group-hover:shadow-[0_0_24px_rgba(145,94,255,0.35)]"
+            className="flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-tertiary shadow-card transition duration-300 group-hover:-translate-y-1"
             style={{
-              background:
-                "radial-gradient(circle at 30% 25%, #2a2540 0%, #151030 55%, #0b0918 100%)",
+              background: runtime.isLight
+                ? "radial-gradient(circle at 30% 25%, #ffffff 0%, #eef2ff 55%, #e2e8f0 100%)"
+                : "radial-gradient(circle at 30% 25%, #2a2540 0%, #151030 55%, #0b0918 100%)",
+              borderColor: "var(--color-border)",
+              ["--tech-accent" as string]: accent,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = `${accent}80`;
+              e.currentTarget.style.boxShadow = `0 0 24px ${runtime.palette.accentSoft}`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "";
+              e.currentTarget.style.boxShadow = "";
             }}
           >
             <img
@@ -35,7 +49,7 @@ const Tech = () => {
               draggable={false}
             />
           </div>
-          <span className="mt-2 max-w-[7rem] truncate text-center text-xs text-secondary group-hover:text-white">
+          <span className="mt-2 max-w-[7rem] truncate text-center text-xs text-secondary group-hover:text-fg">
             {technology.name}
           </span>
         </div>

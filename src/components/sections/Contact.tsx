@@ -2,11 +2,12 @@ import React, { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import emailjs from "@emailjs/browser";
 
-import { EarthCanvas } from "../canvas";
+import ContactScene from "../canvas/ContactScene";
 import { SectionWrapper } from "../../hoc";
 import { slideIn } from "../../utils/motion";
 import { Header } from "../atoms/Header";
 import { usePortfolio } from "../../context/PortfolioContext";
+import { useThemeRuntime } from "../../utils/themeRuntime";
 
 const emailjsConfig = {
   serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -17,9 +18,20 @@ const emailjsConfig = {
 const Contact = () => {
   const { data } = usePortfolio();
   const { config } = data;
+  const runtime = useThemeRuntime(data.theme3d);
   const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [loading, setLoading] = useState(false);
+  const [formStatus, setFormStatus] = useState<{
+    type: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
+
+  const isConfigured = Boolean(
+    emailjsConfig.serviceId &&
+      emailjsConfig.templateId &&
+      emailjsConfig.accessToken
+  );
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -30,15 +42,29 @@ const Contact = () => {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setFormStatus(null);
 
-    if (
-      !emailjsConfig.serviceId ||
-      !emailjsConfig.templateId ||
-      !emailjsConfig.accessToken
-    ) {
-      alert(
-        "Contact form is not configured. Set VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, and VITE_EMAILJS_ACCESS_TOKEN."
-      );
+    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
+      setFormStatus({
+        type: "error",
+        text: "Please fill in name, email, and message.",
+      });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setFormStatus({
+        type: "error",
+        text: "Please enter a valid email address.",
+      });
+      return;
+    }
+
+    if (!isConfigured) {
+      setFormStatus({
+        type: "info",
+        text: "Contact form is not configured yet. Set VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, and VITE_EMAILJS_ACCESS_TOKEN when you are ready (external setup).",
+      });
       return;
     }
 
@@ -60,13 +86,19 @@ const Contact = () => {
       .then(
         () => {
           setLoading(false);
-          alert("Thank you. I will get back to you as soon as possible.");
+          setFormStatus({
+            type: "success",
+            text: "Thank you. I will get back to you as soon as possible.",
+          });
           setForm({ name: "", email: "", message: "" });
         },
         (error) => {
           setLoading(false);
           console.error(error);
-          alert("Something went wrong. Please try again later.");
+          setFormStatus({
+            type: "error",
+            text: "Something went wrong. Please try again later.",
+          });
         }
       );
   };
@@ -76,6 +108,8 @@ const Contact = () => {
     data.meta.location ||
     data.meta.linkedin ||
     data.meta.github;
+
+  const accent = runtime.palette.accent;
 
   return (
     <div className="flex flex-col-reverse gap-10 overflow-hidden xl:mt-12 xl:flex-row xl:items-stretch">
@@ -92,7 +126,8 @@ const Contact = () => {
             )}
             {data.meta.phone && (
               <a
-                className="whitespace-nowrap text-[#915EFF] hover:underline"
+                className="whitespace-nowrap hover:underline"
+                style={{ color: accent }}
                 href={`tel:${data.meta.phone.replace(/\s/g, "")}`}
               >
                 {data.meta.phone}
@@ -100,7 +135,8 @@ const Contact = () => {
             )}
             {data.meta.linkedin && (
               <a
-                className="whitespace-nowrap text-[#915EFF] hover:underline"
+                className="whitespace-nowrap hover:underline"
+                style={{ color: accent }}
                 href={
                   data.meta.linkedin.startsWith("http")
                     ? data.meta.linkedin
@@ -114,7 +150,8 @@ const Contact = () => {
             )}
             {data.meta.github && (
               <a
-                className="whitespace-nowrap text-[#915EFF] hover:underline"
+                className="whitespace-nowrap hover:underline"
+                style={{ color: accent }}
                 href={
                   data.meta.github.startsWith("http")
                     ? data.meta.github
@@ -133,6 +170,7 @@ const Contact = () => {
           ref={formRef}
           onSubmit={handleSubmit}
           className="mt-12 flex flex-col gap-8"
+          noValidate
         >
           {Object.keys(config.contact.form).map((input) => {
             const { span, placeholder } =
@@ -141,35 +179,46 @@ const Contact = () => {
 
             return (
               <label key={input} className="flex flex-col">
-                <span className="mb-4 font-medium text-white">{span}</span>
+                <span className="mb-4 font-medium text-fg">{span}</span>
                 <Component
                   type={input === "email" ? "email" : "text"}
                   name={input}
                   value={form[input as keyof typeof form]}
                   onChange={handleChange}
                   placeholder={placeholder}
-                  className="bg-tertiary placeholder:text-secondary rounded-lg border-none px-6 py-4 font-medium text-white outline-none"
+                  className="bg-tertiary placeholder:text-secondary rounded-lg border border-[color:var(--color-border)] px-6 py-4 font-medium text-fg outline-none"
                   {...(input === "message" && { rows: 7 })}
                 />
               </label>
             );
           })}
+
+          {formStatus && (
+            <div
+              role="status"
+              className={`status-banner status-banner--${formStatus.type}`}
+            >
+              {formStatus.text}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="bg-tertiary shadow-primary w-fit rounded-xl px-8 py-3 font-bold text-white shadow-md outline-none"
+            disabled={loading}
+            className="shadow-primary w-fit rounded-xl px-8 py-3 font-bold text-white shadow-md outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ backgroundColor: accent }}
           >
             {loading ? "Sending..." : "Send"}
           </button>
         </form>
       </motion.div>
 
-      {/* Fixed aspect/height so the globe keeps a correct ratio on all breakpoints */}
       <motion.div
         variants={slideIn("right", "tween", 0.2, 1)}
         className="relative mx-auto h-[320px] w-full max-w-[520px] md:h-[450px] xl:mx-0 xl:h-auto xl:min-h-[500px] xl:max-w-none xl:flex-1"
       >
         <div className="absolute inset-0 xl:relative xl:h-full xl:min-h-[500px]">
-          <EarthCanvas />
+          <ContactScene />
         </div>
       </motion.div>
     </div>
