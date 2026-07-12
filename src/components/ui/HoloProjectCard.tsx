@@ -67,7 +67,7 @@ const HoloProjectCard: FC<Props> = ({
           <div className="holo-card__media">
             <img
               src={image}
-              alt=""
+              alt={name}
               className="holo-card__img"
               loading="lazy"
               decoding="async"
