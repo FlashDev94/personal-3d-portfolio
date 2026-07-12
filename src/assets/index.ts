@@ -21,6 +21,12 @@ import tailwind from "./tech/tailwind.png";
 import typescript from "./tech/typescript.png";
 import threejs from "./tech/threejs.svg";
 
+/** Company brand marks used on the experience timeline. */
+import companyNetskope from "./companies/netskope.png";
+import companyHackerRank from "./companies/hackerrank.png";
+import companyNagarro from "./companies/nagarro.png";
+import companyCedcoss from "./companies/cedcoss.png";
+
 // Project placeholders are generated as SVG data URLs (see utils/icons.ts)
 // to avoid shipping third-party brand/demo assets.
 
@@ -46,4 +52,8 @@ export {
   tailwind,
   typescript,
   threejs,
+  companyNetskope,
+  companyHackerRank,
+  companyNagarro,
+  companyCedcoss,
 };
