@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import type {
   ConfiguratorTab,
   TPortfolioData,
+  TTheme3d,
 } from "../../types/portfolio";
 import { usePortfolio } from "../../context/PortfolioContext";
 import {
@@ -19,6 +20,15 @@ import {
   TAG_COLORS,
 } from "../../utils/icons";
 import { defaultPortfolioData } from "../../constants/defaults";
+import {
+  COLOR_MODE_OPTIONS,
+  CONTACT_SCENE_OPTIONS,
+  HERO_SCENE_OPTIONS,
+  PALETTE_OPTIONS,
+  clampTheme3d,
+  defaultTheme3d,
+  resolveThemeTokens,
+} from "../../constants/theme3d";
 
 const TABS: { id: ConfiguratorTab; label: string }[] = [
   { id: "upload", label: "Resume Upload" },
@@ -28,9 +38,9 @@ const TABS: { id: ConfiguratorTab; label: string }[] = [
   { id: "skills", label: "Skills" },
   { id: "projects", label: "Projects" },
   { id: "testimonials", label: "Testimonials" },
+  { id: "theme3d", label: "3D & Theme" },
   { id: "data", label: "Import / Export" },
 ];
-
 const fieldClass =
   "w-full rounded-lg border border-white/10 bg-[#151030] px-3 py-2 text-sm text-white outline-none placeholder:text-secondary focus:border-[#915EFF]";
 const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-secondary";
@@ -60,7 +70,12 @@ const PortfolioConfigurator: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openPanel = () => {
-    setDraft(deepClone(data));
+    setDraft(
+      deepClone({
+        ...data,
+        theme3d: clampTheme3d(data.theme3d),
+      })
+    );
     setStatus(null);
     setError(null);
     setOpen(true);
@@ -83,7 +98,11 @@ const PortfolioConfigurator: React.FC = () => {
     setStatus(null);
     try {
       const parsed = await parseResumeFile(file);
-      setDraft(parsed);
+      setDraft((prev) => ({
+        ...parsed,
+        // Keep current 3D theme when filling content from a resume
+        theme3d: clampTheme3d(prev.theme3d),
+      }));
       setStatus(
         `Parsed “${file.name}” successfully. Review the tabs, tweak anything, then click Apply.`
       );
@@ -101,7 +120,10 @@ const PortfolioConfigurator: React.FC = () => {
     setStatus(null);
     try {
       const parsed = await parseResumeFromUrl("/sample-resume.pdf");
-      setDraft(parsed);
+      setDraft((prev) => ({
+        ...parsed,
+        theme3d: clampTheme3d(prev.theme3d),
+      }));
       setStatus(
         "Sample resume loaded (Pradeep Singh). Review tabs and click Apply to update the portfolio."
       );
@@ -123,12 +145,53 @@ const PortfolioConfigurator: React.FC = () => {
     }));
   };
 
+  const updateTheme = <K extends keyof TTheme3d>(key: K, value: TTheme3d[K]) => {
+    setDraft((prev) => ({
+      ...prev,
+      theme3d: clampTheme3d({ ...prev.theme3d, [key]: value }),
+    }));
+  };
+
+  const applyPalettePreset = (paletteId: TTheme3d["palette"]) => {
+    setDraft((prev) => {
+      const mode = prev.theme3d?.colorMode ?? "dark";
+      const tokens = resolveThemeTokens({ palette: paletteId, colorMode: mode });
+      return {
+        ...prev,
+        theme3d: clampTheme3d({
+          ...prev.theme3d,
+          palette: paletteId,
+          starsColor: tokens.starsDefault,
+        }),
+      };
+    });
+  };
+
+  const applyColorMode = (colorMode: TTheme3d["colorMode"]) => {
+    setDraft((prev) => {
+      const paletteId = prev.theme3d?.palette ?? "violet";
+      const tokens = resolveThemeTokens({ palette: paletteId, colorMode });
+      return {
+        ...prev,
+        theme3d: clampTheme3d({
+          ...prev.theme3d,
+          colorMode,
+          starsColor: tokens.starsDefault,
+        }),
+      };
+    });
+  };
+
   return (
     <>
       <button
         type="button"
         onClick={openPanel}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-[#915EFF] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#915EFF]/40 transition hover:scale-105 hover:bg-[#7d4ee0]"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105"
+        style={{
+          backgroundColor: "var(--accent, #915EFF)",
+          boxShadow: "0 10px 25px var(--accent-soft, rgba(145, 94, 255, 0.4))",
+        }}
         aria-label="Customize portfolio"
       >
         <span className="text-base">⚙</span>
@@ -526,9 +589,14 @@ const PortfolioConfigurator: React.FC = () => {
                               {
                                 title: "Software Engineer",
                                 companyName: "Company",
-                                icon: resolveCompanyIcon("Company", prev.experiences.length),
+                                icon: resolveCompanyIcon(
+                                  "Company",
+                                  prev.experiences.length
+                                ),
                                 iconBg: "#383E56",
                                 date: "Jan 2024 – Present",
+                                location: "",
+                                subtitle: "Product engineering · web platforms",
                                 points: ["Describe your impact here."],
                               },
                               ...prev.experiences,
@@ -576,7 +644,7 @@ const PortfolioConfigurator: React.FC = () => {
                               }}
                             />
                           </div>
-                          <div className="sm:col-span-2">
+                          <div>
                             <label className={labelClass}>Date range</label>
                             <input
                               className={fieldClass}
@@ -585,7 +653,50 @@ const PortfolioConfigurator: React.FC = () => {
                                 const date = e.target.value;
                                 setDraft((prev) => {
                                   const experiences = [...prev.experiences];
-                                  experiences[index] = { ...experiences[index], date };
+                                  experiences[index] = {
+                                    ...experiences[index],
+                                    date,
+                                  };
+                                  return { ...prev, experiences };
+                                });
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label className={labelClass}>Location</label>
+                            <input
+                              className={fieldClass}
+                              value={exp.location || ""}
+                              placeholder="Bengaluru, India"
+                              onChange={(e) => {
+                                const location = e.target.value;
+                                setDraft((prev) => {
+                                  const experiences = [...prev.experiences];
+                                  experiences[index] = {
+                                    ...experiences[index],
+                                    location,
+                                  };
+                                  return { ...prev, experiences };
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className={labelClass}>
+                              Focus subtitle (shown under company)
+                            </label>
+                            <input
+                              className={fieldClass}
+                              value={exp.subtitle || ""}
+                              placeholder="e.g. Enterprise security · backend services"
+                              onChange={(e) => {
+                                const subtitle = e.target.value;
+                                setDraft((prev) => {
+                                  const experiences = [...prev.experiences];
+                                  experiences[index] = {
+                                    ...experiences[index],
+                                    subtitle,
+                                  };
                                   return { ...prev, experiences };
                                 });
                               }}
@@ -1094,12 +1205,300 @@ const PortfolioConfigurator: React.FC = () => {
                   </div>
                 )}
 
+                {tab === "theme3d" && (
+                  <div className="space-y-4">
+                    <div className={sectionCard}>
+                      <h3 className="text-base font-semibold text-white">
+                        3D & visual theme
+                      </h3>
+                      <p className="text-sm text-secondary">
+                        Switch hero/contact scenes, effects, quality, and accent palette.
+                        Everything is saved in this browser with your portfolio config — no
+                        external services required.
+                      </p>
+                      <label className="flex items-center gap-3 text-sm text-white">
+                        <input
+                          type="checkbox"
+                          checked={draft.theme3d?.enabled ?? true}
+                          onChange={(e) => updateTheme("enabled", e.target.checked)}
+                          className="h-4 w-4 accent-[#915EFF]"
+                        />
+                        Enable 3D canvases (master switch)
+                      </label>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Hero scene pack</h3>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {HERO_SCENE_OPTIONS.map((opt) => {
+                          const active = draft.theme3d?.heroScene === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => updateTheme("heroScene", opt.id)}
+                              className={`rounded-xl border p-3 text-left transition ${
+                                active
+                                  ? "border-[#915EFF] bg-[#915EFF]/15"
+                                  : "border-white/10 hover:border-white/25"
+                              }`}
+                            >
+                              <div className="text-sm font-semibold text-white">
+                                {opt.label}
+                                {opt.heavy ? (
+                                  <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-secondary">
+                                    desktop
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 text-xs text-secondary">{opt.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Contact scene pack</h3>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {CONTACT_SCENE_OPTIONS.map((opt) => {
+                          const active = draft.theme3d?.contactScene === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => updateTheme("contactScene", opt.id)}
+                              className={`rounded-xl border p-3 text-left transition ${
+                                active
+                                  ? "border-[#915EFF] bg-[#915EFF]/15"
+                                  : "border-white/10 hover:border-white/25"
+                              }`}
+                            >
+                              <div className="text-sm font-semibold text-white">
+                                {opt.label}
+                              </div>
+                              <p className="mt-1 text-xs text-secondary">{opt.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Color mode</h3>
+                      <p className="mb-2 text-xs text-secondary">
+                        Switch the whole site between dark navy and bright light surfaces.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {COLOR_MODE_OPTIONS.map((opt) => {
+                          const active =
+                            (draft.theme3d?.colorMode ?? "dark") === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => applyColorMode(opt.id)}
+                              className={`rounded-xl border p-3 text-left transition ${
+                                active
+                                  ? "border-[#915EFF] bg-[#915EFF]/15"
+                                  : "border-white/10 hover:border-white/25"
+                              }`}
+                            >
+                              <div className="text-sm font-semibold text-white">
+                                {opt.label}
+                              </div>
+                              <p className="mt-1 text-xs text-secondary">
+                                {opt.description}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Accent palette</h3>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {PALETTE_OPTIONS.map((opt) => {
+                          const active = draft.theme3d?.palette === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => applyPalettePreset(opt.id)}
+                              className={`rounded-xl border p-3 text-left transition ${
+                                active
+                                  ? "border-[#915EFF] bg-[#915EFF]/15"
+                                  : "border-white/10 hover:border-white/25"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block h-4 w-4 rounded-full"
+                                  style={{ backgroundColor: opt.accent }}
+                                />
+                                <span className="text-sm font-semibold text-white">
+                                  {opt.label}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-secondary">{opt.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Effects</h3>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="flex items-center gap-2 text-sm text-white">
+                          <input
+                            type="checkbox"
+                            checked={draft.theme3d?.showStars ?? true}
+                            onChange={(e) => updateTheme("showStars", e.target.checked)}
+                            className="h-4 w-4 accent-[#915EFF]"
+                          />
+                          Starfield background
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-white">
+                          <input
+                            type="checkbox"
+                            checked={draft.theme3d?.autoRotate ?? true}
+                            onChange={(e) => updateTheme("autoRotate", e.target.checked)}
+                            className="h-4 w-4 accent-[#915EFF]"
+                          />
+                          Auto-rotate scenes
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-white">
+                          <input
+                            type="checkbox"
+                            checked={draft.theme3d?.allowOrbit ?? true}
+                            onChange={(e) => updateTheme("allowOrbit", e.target.checked)}
+                            className="h-4 w-4 accent-[#915EFF]"
+                          />
+                          Allow orbit drag
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-white">
+                          <input
+                            type="checkbox"
+                            checked={draft.theme3d?.mobile3d ?? false}
+                            onChange={(e) => updateTheme("mobile3d", e.target.checked)}
+                            className="h-4 w-4 accent-[#915EFF]"
+                          />
+                          Light 3D on mobile
+                        </label>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className={labelClass}>Motion speed</label>
+                          <input
+                            type="range"
+                            min={0.25}
+                            max={2}
+                            step={0.05}
+                            value={draft.theme3d?.motionSpeed ?? 1}
+                            onChange={(e) =>
+                              updateTheme("motionSpeed", Number(e.target.value))
+                            }
+                            className="w-full accent-[#915EFF]"
+                          />
+                          <p className="text-xs text-secondary">
+                            {(draft.theme3d?.motionSpeed ?? 1).toFixed(2)}×
+                          </p>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Stars density</label>
+                          <input
+                            type="range"
+                            min={0.25}
+                            max={2}
+                            step={0.05}
+                            value={draft.theme3d?.starsDensity ?? 1}
+                            onChange={(e) =>
+                              updateTheme("starsDensity", Number(e.target.value))
+                            }
+                            className="w-full accent-[#915EFF]"
+                          />
+                          <p className="text-xs text-secondary">
+                            {(draft.theme3d?.starsDensity ?? 1).toFixed(2)}×
+                          </p>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Stars color</label>
+                          <input
+                            type="color"
+                            value={draft.theme3d?.starsColor || "#f272c8"}
+                            onChange={(e) => updateTheme("starsColor", e.target.value)}
+                            className="h-10 w-full cursor-pointer rounded border border-white/10 bg-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Quality</label>
+                          <select
+                            className={fieldClass}
+                            value={draft.theme3d?.quality ?? "medium"}
+                            onChange={(e) =>
+                              updateTheme(
+                                "quality",
+                                e.target.value as TTheme3d["quality"]
+                              )
+                            }
+                          >
+                            <option value="low">Low (best performance)</option>
+                            <option value="medium">Medium (balanced)</option>
+                            <option value="high">High (sharpest)</option>
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className={labelClass}>Reduced motion</label>
+                          <select
+                            className={fieldClass}
+                            value={draft.theme3d?.reducedMotion ?? "system"}
+                            onChange={(e) =>
+                              updateTheme(
+                                "reducedMotion",
+                                e.target.value as TTheme3d["reducedMotion"]
+                              )
+                            }
+                          >
+                            <option value="system">Follow system preference</option>
+                            <option value="force-on">Force reduce motion</option>
+                            <option value="force-off">Force full motion</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Reset 3D theme</h3>
+                      <p className="text-sm text-secondary">
+                        Restore default packs, palette, and effect settings without resetting
+                        portfolio content.
+                      </p>
+                      <button
+                        type="button"
+                        className={btnGhost}
+                        onClick={() =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            theme3d: { ...defaultTheme3d },
+                          }))
+                        }
+                      >
+                        Reset theme to defaults
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {tab === "data" && (
                   <div className="space-y-4">
                     <div className={sectionCard}>
                       <h3 className="font-semibold text-white">Export / import JSON</h3>
                       <p className="text-sm text-secondary">
-                        Download your full portfolio configuration or paste JSON from another device.
+                        Download your full portfolio configuration (including 3D & theme) or paste
+                        JSON from another device.
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -1141,7 +1540,12 @@ const PortfolioConfigurator: React.FC = () => {
                           try {
                             importJson(jsonText);
                             const parsed = JSON.parse(jsonText) as TPortfolioData;
-                            setDraft(parsed);
+                            setDraft(
+                              deepClone({
+                                ...parsed,
+                                theme3d: clampTheme3d(parsed.theme3d),
+                              })
+                            );
                             setStatus("JSON imported and applied.");
                             setError(null);
                           } catch (err) {
