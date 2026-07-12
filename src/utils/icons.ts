@@ -1,5 +1,9 @@
 import {
   backend,
+  companyCedcoss,
+  companyHackerRank,
+  companyNagarro,
+  companyNetskope,
   creator,
   css,
   docker,
@@ -216,8 +220,109 @@ export function resolveServiceIcon(title: string, index = 0): string {
   return SERVICE_ICONS[index % SERVICE_ICONS.length];
 }
 
+/** Normalize company names for icon lookup (strip legal suffixes, punctuation). */
+export function normalizeCompanyKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(
+      /\b(pvt\.?|private|ltd\.?|limited|inc\.?|llc|corp\.?|corporation|technologies|technology|softwares?|solutions|group|co\.?)\b/gi,
+      " "
+    )
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Known employer brand marks shipped with the app (no runtime CDN). */
+const COMPANY_ICON_ALIASES: { match: RegExp; icon: string }[] = [
+  { match: /\bnetskope\b/i, icon: companyNetskope },
+  { match: /\bhackerrank\b/i, icon: companyHackerRank },
+  { match: /\bnagarro\b/i, icon: companyNagarro },
+  { match: /\bcedcoss\b/i, icon: companyCedcoss },
+];
+
 export function resolveCompanyIcon(companyName: string, index = 0): string {
-  return makeInitialsIcon(companyName, ICON_COLORS[index % ICON_COLORS.length]);
+  const raw = (companyName || "").trim();
+  if (!raw) {
+    return makeInitialsIcon("Co", ICON_COLORS[index % ICON_COLORS.length]);
+  }
+  for (const { match, icon } of COMPANY_ICON_ALIASES) {
+    if (match.test(raw)) return icon;
+  }
+  const key = normalizeCompanyKey(raw);
+  for (const { match, icon } of COMPANY_ICON_ALIASES) {
+    if (match.test(key)) return icon;
+  }
+  return makeInitialsIcon(raw, ICON_COLORS[index % ICON_COLORS.length]);
+}
+
+/** Strip legal suffixes for cleaner timeline labels. */
+export function cleanCompanyDisplayName(name: string): string {
+  return name
+    .replace(
+      /\s*(Pvt\.?\s*Ltd\.?|Private\s+Limited|Inc\.?|LLC|Ltd\.?|Corp\.?|Corporation)\.?\s*$/i,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Infer a short domain-focused subtitle from role title + bullets.
+ * Used when the resume does not provide a dedicated focus line.
+ */
+export function inferExperienceSubtitle(
+  title: string,
+  points: string[],
+  companyName = ""
+): string {
+  const blob = `${title} ${companyName} ${points.join(" ")}`.toLowerCase();
+
+  if (/security|drm|policy|incident|sase|zero.?trust|netskope/.test(blob)) {
+    return "Enterprise security · backend services";
+  }
+  if (
+    /design system|wcag|accessibility|proctor|hiring|interview|hackerrank/.test(
+      blob
+    )
+  ) {
+    return "Product UI · design systems · generative AI";
+  }
+  if (/migrat|angular|i18n|international|casino|nagarro/.test(blob)) {
+    return "Frontend modernization · client delivery";
+  }
+  if (
+    /e-?commerce|marketplace|payment|shopify|seller|amazon|ebay|cedcoss/.test(
+      blob
+    )
+  ) {
+    return "Full-stack commerce · marketplace integrations";
+  }
+  if (/microservice|distributed|service mesh|kafka|rabbitmq|queue/.test(blob)) {
+    return "Distributed systems · async messaging";
+  }
+  if (/cloud|aws|lambda|devops|kubernetes|docker/.test(blob)) {
+    return "Cloud platforms · infrastructure";
+  }
+  if (/mobile|react native|ios|android/.test(blob)) {
+    return "Mobile product engineering";
+  }
+  if (/frontend|front-end|react|ui|ux/.test(blob)) {
+    return "Frontend engineering · web platforms";
+  }
+  if (/backend|api|node|server|rest/.test(blob)) {
+    return "Backend APIs · service design";
+  }
+  if (/full.?stack/.test(blob)) {
+    return "Full-stack product engineering";
+  }
+  if (/staff|principal|architect/.test(blob)) {
+    return "Architecture · technical leadership";
+  }
+  if (/senior|lead/.test(blob)) {
+    return "Feature ownership · mentoring";
+  }
+  return "Software engineering · product delivery";
 }
 
 export function resolveProjectImage(name: string, index = 0): string {
