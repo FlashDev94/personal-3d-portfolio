@@ -9,6 +9,13 @@ export type TExperience = {
   iconBg: string;
   date: string;
   points: string[];
+  /** City / region shown under the role (e.g. "Bengaluru, India"). */
+  location?: string;
+  /**
+   * Short focus line under the company — domain context for the role
+   * (e.g. "Enterprise security · backend services").
+   */
+  subtitle?: string;
 } & Required<Omit<TCommonProps, "name">>;
 
 export type TTestimonial = {

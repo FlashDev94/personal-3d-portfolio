@@ -19,15 +19,12 @@ import {
   web,
 } from "../assets";
 import {
-  makeInitialsIcon,
   makeProjectPlaceholder,
+  resolveCompanyIcon,
 } from "../utils/icons";
+import { defaultTheme3d } from "./theme3d";
 
 export const STORAGE_KEY = "portfolio-config-v1";
-
-/** Generic placeholder companies — no real brand trademarks. */
-const companyIcon = (name: string, color: string) =>
-  makeInitialsIcon(name, color);
 
 export const defaultPortfolioData: TPortfolioData = {
   config: {
@@ -108,9 +105,11 @@ export const defaultPortfolioData: TPortfolioData = {
     {
       title: "Staff Engineer",
       companyName: "Netskope",
-      icon: companyIcon("Netskope", "#383E56"),
-      iconBg: "#383E56",
+      icon: resolveCompanyIcon("Netskope", 0),
+      iconBg: "#0B1F33",
       date: "Dec 2025 – Jun 2026",
+      location: "Bengaluru, India",
+      subtitle: "Enterprise security · DRM services · backend APIs",
       points: [
         "Designed and implemented DRM services for policy and profile management with dependency validation across backend systems.",
         "Integrated Microsoft Teams via Bot Framework for automated incident reporting and enterprise security product APIs.",
@@ -119,34 +118,42 @@ export const defaultPortfolioData: TPortfolioData = {
     {
       title: "Software Development Engineer 2",
       companyName: "HackerRank",
-      icon: companyIcon("HackerRank", "#E6DEDD"),
-      iconBg: "#E6DEDD",
+      icon: resolveCompanyIcon("HackerRank", 1),
+      iconBg: "#0E1419",
       date: "Nov 2022 – Dec 2025",
+      location: "Bengaluru, India",
+      subtitle: "Product UI · design systems · generative AI",
       points: [
         "Led redesign of the test-taking experience in React and TypeScript, including proctoring flows and generative AI features.",
-        "Built 20+ reusable design-system components with light/dark themes and improved WCAG accessibility across dozens of pages.",
+        "Built 20+ reusable design-system components with light/dark themes and improved WCAG accessibility across 45 pages.",
+        "Shipped a React resume-builder module integrating LaTeX libraries for candidate workflows.",
       ],
     },
     {
       title: "Senior Engineer",
       companyName: "Nagarro",
-      icon: companyIcon("Nagarro", "#915EFF"),
-      iconBg: "#915EFF",
+      icon: resolveCompanyIcon("Nagarro", 2),
+      iconBg: "#0A1628",
       date: "Nov 2021 – Oct 2022",
+      location: "Gurgaon, India",
+      subtitle: "Frontend modernization · client delivery",
       points: [
-        "Migrated a large portion of a legacy platform from Angular to React, improving performance across financial modules.",
-        "Implemented internationalization for four languages and partnered directly with clients on feature delivery.",
+        "Migrated 60% of a legacy casino aggregator from Angular to React, improving performance across financial modules.",
+        "Implemented internationalization for four languages (PL, IT, FR, ES) and partnered directly with clients on feature delivery.",
       ],
     },
     {
       title: "Software Developer",
       companyName: "Cedcoss Technologies",
-      icon: companyIcon("Cedcoss", "#151030"),
-      iconBg: "#151030",
+      icon: resolveCompanyIcon("Cedcoss", 3),
+      iconBg: "#1A1030",
       date: "Jun 2018 – Nov 2021",
+      location: "Lucknow, India",
+      subtitle: "Full-stack commerce · marketplace integrations",
       points: [
-        "Developed multiple live e-commerce applications with React, Redux, Node.js, and MongoDB.",
-        "Built marketplace integrations and reduced cloud costs by migrating log/message processing workloads.",
+        "Developed 4 live e-commerce applications (React, Redux, Node.js, MongoDB) that drove a 40% increase in company revenue.",
+        "Built marketplace integrations for Amazon, eBay, Walmart, and Google Shopping with real-time order/shipment workflows.",
+        "Reduced AWS server cost by 30% by migrating log and RabbitMQ processing workloads to Oracle Cloud.",
       ],
     },
   ],
@@ -196,4 +203,5 @@ export const defaultPortfolioData: TPortfolioData = {
     linkedin: "https://linkedin.com/in/pradeeps-dev",
     github: "https://github.com/FlashDev94",
   },
+  theme3d: { ...defaultTheme3d },
 };

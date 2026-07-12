@@ -8,6 +8,8 @@ import React, {
 } from "react";
 import type { TPortfolioData } from "../types/portfolio";
 import { defaultPortfolioData, STORAGE_KEY } from "../constants/defaults";
+import { clampTheme3d } from "../constants/theme3d";
+import { applyPaletteToDocument } from "../utils/themeRuntime";
 
 type PortfolioContextValue = {
   data: TPortfolioData;
@@ -71,6 +73,7 @@ function safeParse(raw: string | null): TPortfolioData | null {
       experiences: parsed.experiences ?? defaultPortfolioData.experiences,
       testimonials: parsed.testimonials ?? defaultPortfolioData.testimonials,
       projects: parsed.projects ?? defaultPortfolioData.projects,
+      theme3d: clampTheme3d(parsed.theme3d ?? defaultPortfolioData.theme3d),
     };
   } catch {
     return null;
@@ -104,12 +107,25 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [data.config.html.title]);
 
+  useEffect(() => {
+    applyPaletteToDocument(data.theme3d);
+  }, [data.theme3d]);
+
   const updateData = useCallback((partial: Partial<TPortfolioData>) => {
-    setData((prev) => ({ ...prev, ...partial }));
+    setData((prev) => ({
+      ...prev,
+      ...partial,
+      theme3d: partial.theme3d
+        ? clampTheme3d({ ...prev.theme3d, ...partial.theme3d })
+        : prev.theme3d,
+    }));
   }, []);
 
   const replaceData = useCallback((next: TPortfolioData) => {
-    setData(next);
+    setData({
+      ...next,
+      theme3d: clampTheme3d(next.theme3d ?? defaultPortfolioData.theme3d),
+    });
   }, []);
 
   const resetToDefaults = useCallback(() => {
