@@ -1,4 +1,4 @@
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 
 type BootScreenProps = {
   /** When true, boot sequence may complete and fade out. */
@@ -25,6 +25,16 @@ const BootScreen: FC<BootScreenProps> = ({
   const [visible, setVisible] = useState(true);
   const [exiting, setExiting] = useState(false);
   const [started] = useState(() => performance.now());
+  const finishedRef = useRef(false);
+  const onFinishedRef = useRef(onFinished);
+  onFinishedRef.current = onFinished;
+
+  const finish = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    setVisible(false);
+    onFinishedRef.current?.();
+  };
 
   // Smooth progress while waiting; snap toward 100 when ready
   useEffect(() => {
@@ -33,9 +43,9 @@ const BootScreen: FC<BootScreenProps> = ({
     const id = window.setInterval(() => {
       setProgress((p) => {
         if (ready) return Math.min(100, p + 12);
-        // Ease toward ~72% while hydrating so it never looks stuck at zero
-        if (p >= 72) return p + (Math.random() * 0.3);
-        return p + 1.8 + Math.random() * 2.2;
+        // Cap below 100 while hydrating so the bar never falsely hits 100%
+        if (p >= 72) return Math.min(92, p + Math.random() * 0.3);
+        return Math.min(72, p + 1.8 + Math.random() * 2.2);
       });
     }, 50);
 
@@ -68,11 +78,29 @@ const BootScreen: FC<BootScreenProps> = ({
   useEffect(() => {
     if (!exiting) return;
     const t = window.setTimeout(() => {
-      setVisible(false);
-      onFinished?.();
+      finish();
     }, 420);
     return () => window.clearTimeout(t);
-  }, [exiting, onFinished]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- finish uses refs
+  }, [exiting]);
+
+  // Hard fail-safe: never leave the shell stuck at opacity-0 if ready stalls
+  useEffect(() => {
+    if (!visible) return;
+    const maxMs = Math.max(minDurationMs + 2000, 8000);
+    let forceId = 0;
+    const t = window.setTimeout(() => {
+      setProgress(100);
+      setPhase("SYSTEM ONLINE");
+      setExiting(true);
+      forceId = window.setTimeout(() => finish(), 500);
+    }, maxMs);
+    return () => {
+      window.clearTimeout(t);
+      if (forceId) window.clearTimeout(forceId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- finish uses refs
+  }, [visible, minDurationMs]);
 
   if (!visible) return null;
 
