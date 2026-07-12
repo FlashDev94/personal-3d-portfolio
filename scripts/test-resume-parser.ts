@@ -97,7 +97,7 @@ async function main() {
   console.log("experiences:", core.experiences.length);
   core.experiences.forEach((e, i) => {
     console.log(
-      `  [${i}] ${e.companyName} | ${e.title} | ${e.date} | bullets=${e.points.length}`
+      `  [${i}] ${e.companyName} | ${e.title} | ${e.date} | loc=${e.location || "—"} | bullets=${e.points.length}`
     );
   });
   console.log("projects:", core.projects.map((p) => p.name).join(" · "));
@@ -144,6 +144,21 @@ Software Development Engineer 2 Bengaluru, India
   assert(exp[0].companyName === "Netskope", `company0=${exp[0].companyName}`);
   assert(exp[0].title === "Staff Engineer", `title0=${exp[0].title}`);
   assert(/2025/.test(exp[0].date), "date0");
+  assert(
+    /bengaluru/i.test(exp[0].location || ""),
+    `location0 should parse, got: ${exp[0].location}`
+  );
+  assert(
+    core.experiences.some((e) => /bengaluru|gurgaon|lucknow/i.test(e.location || "")),
+    "at least one experience should carry a city location"
+  );
+  assert(
+    !/pvt\.?\s*ltd/i.test(
+      core.experiences.find((e) => /cedcoss/i.test(e.companyName))?.companyName ||
+        ""
+    ),
+    "Cedcoss should strip Pvt. Ltd. legal suffix"
+  );
 
   console.log("\n✓ resume parser smoke tests passed");
 }
