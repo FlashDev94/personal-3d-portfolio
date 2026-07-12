@@ -1,13 +1,13 @@
-import { usePortfolio } from "../../context/PortfolioContext";
+import { useTheme3d } from "../../context/PortfolioContext";
 import { useThemeRuntime } from "../../utils/themeRuntime";
 import EarthCanvas from "./Earth";
 import AbstractCoreCanvas from "./AbstractCore";
 
 const ContactScene = () => {
-  const { data } = usePortfolio();
-  const runtime = useThemeRuntime(data.theme3d);
+  const { theme3d } = useTheme3d();
+  const runtime = useThemeRuntime(theme3d);
 
-  if (!runtime.webglEnabled || data.theme3d.contactScene === "none") {
+  if (!runtime.webglEnabled || theme3d.contactScene === "none") {
     return (
       <div
         className="flex h-full w-full items-center justify-center rounded-2xl border border-white/5 bg-gradient-to-br from-[#1a1430] to-[#0b0918]"
@@ -29,11 +29,11 @@ const ContactScene = () => {
     antialias: runtime.antialias,
   };
 
-  if (data.theme3d.contactScene === "planet") {
+  if (theme3d.contactScene === "planet") {
     return <EarthCanvas {...common} />;
   }
 
-  if (data.theme3d.contactScene === "abstract_core") {
+  if (theme3d.contactScene === "abstract_core") {
     return (
       <AbstractCoreCanvas
         {...common}

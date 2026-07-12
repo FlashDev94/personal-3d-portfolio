@@ -1,4 +1,4 @@
-import React, { Suspense, useRef } from "react";
+import React, { memo, Suspense, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Preload } from "@react-three/drei";
 import type { Group } from "three";
@@ -103,4 +103,4 @@ const NeonGridCanvas: React.FC<NeonGridProps> = ({
   );
 };
 
-export default NeonGridCanvas;
+export default memo(NeonGridCanvas);

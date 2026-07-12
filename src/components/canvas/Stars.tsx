@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, Suspense } from "react";
+import React, { memo, useMemo, useRef, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Points, PointMaterial, Preload } from "@react-three/drei";
 import { random } from "maath";
@@ -100,4 +100,4 @@ const StarsCanvas: React.FC<StarsCanvasProps> = ({
   );
 };
 
-export default StarsCanvas;
+export default memo(StarsCanvas);

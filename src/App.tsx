@@ -1,8 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, memo } from "react";
 import { BrowserRouter } from "react-router-dom";
 
 import { Hero, Navbar } from "./components";
-import { PortfolioProvider, usePortfolio } from "./context/PortfolioContext";
+import {
+  PortfolioProvider,
+  usePortfolio,
+  useTheme3d,
+} from "./context/PortfolioContext";
 import ErrorBoundary from "./components/layout/ErrorBoundary";
 import BootScreen from "./components/layout/BootScreen";
 import herobg from "./assets/herobg.png";
@@ -37,9 +41,59 @@ const SectionFallback = () => (
   </div>
 );
 
+/** Theme-only: boot accent. Isolated so content tree is not re-rendered. */
+const BootScreenBridge = memo(function BootScreenBridge({
+  ready,
+  onFinished,
+}: {
+  ready: boolean;
+  onFinished: () => void;
+}) {
+  const { theme3d } = useTheme3d();
+  const runtime = useThemeRuntime(theme3d);
+  return (
+    <BootScreen
+      ready={ready}
+      accent={runtime.palette.accent}
+      minDurationMs={650}
+      onFinished={onFinished}
+    />
+  );
+});
+
+/** Theme-only: starfield. */
+const StarsLayer = memo(function StarsLayer({ active }: { active: boolean }) {
+  const { theme3d } = useTheme3d();
+  const runtime = useThemeRuntime(theme3d);
+
+  if (!active || !runtime.webglEnabled || !theme3d.showStars) {
+    return null;
+  }
+
+  return (
+    <ErrorBoundary
+      name="Stars"
+      fallback={<div className="absolute inset-0" aria-hidden />}
+    >
+      <Suspense fallback={null}>
+        <StarsCanvas
+          color={theme3d.starsColor || runtime.palette.starsDefault}
+          particleCount={runtime.particleCount}
+          motionSpeed={runtime.motionSpeed || 1}
+          animate={!runtime.reduceMotion}
+          dpr={runtime.dpr}
+        />
+      </Suspense>
+    </ErrorBoundary>
+  );
+});
+
+/**
+ * Content shell — subscribes only to portfolio content.
+ * Theme toggles re-render Navbar/Hero/Stars islands, not About/Works/etc.
+ */
 const PortfolioShell = () => {
   const { data, isHydrated } = usePortfolio();
-  const runtime = useThemeRuntime(data.theme3d);
   const [bootDone, setBootDone] = useState(false);
 
   const onBootFinished = useCallback(() => setBootDone(true), []);
@@ -51,17 +105,12 @@ const PortfolioShell = () => {
     return () => window.clearTimeout(t);
   }, [bootDone]);
 
-  const showStars =
-    bootDone && runtime.webglEnabled && data.theme3d.showStars;
-
   return (
     <>
-      <BootScreen
-        ready={isHydrated}
-        accent={runtime.palette.accent}
-        minDurationMs={650}
-        onFinished={onBootFinished}
-      />
+      {/* Unmount after boot so theme toggles do not keep re-rendering the overlay island */}
+      {!bootDone && (
+        <BootScreenBridge ready={isHydrated} onFinished={onBootFinished} />
+      )}
 
       <BrowserRouter>
         <div
@@ -107,24 +156,7 @@ const PortfolioShell = () => {
             <Suspense fallback={<SectionFallback />}>
               <Contact />
             </Suspense>
-            {showStars && (
-              <ErrorBoundary
-                name="Stars"
-                fallback={<div className="absolute inset-0" aria-hidden />}
-              >
-                <Suspense fallback={null}>
-                  <StarsCanvas
-                    color={
-                      data.theme3d.starsColor || runtime.palette.starsDefault
-                    }
-                    particleCount={runtime.particleCount}
-                    motionSpeed={runtime.motionSpeed || 1}
-                    animate={!runtime.reduceMotion}
-                    dpr={runtime.dpr}
-                  />
-                </Suspense>
-              </ErrorBoundary>
-            )}
+            <StarsLayer active={bootDone} />
           </div>
           {bootDone && (
             <Suspense fallback={null}>

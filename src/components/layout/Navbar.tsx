@@ -3,13 +3,15 @@ import { Link } from "react-router-dom";
 
 import { styles } from "../../constants/styles";
 import { logo, menu, close } from "../../assets";
-import { usePortfolio } from "../../context/PortfolioContext";
+import { usePortfolio, useTheme3d } from "../../context/PortfolioContext";
 import { clampTheme3d, resolveThemeTokens } from "../../constants/theme3d";
+import { applyPaletteToDocument } from "../../utils/themeRuntime";
 
 const Navbar = () => {
-  const { data, updateData } = usePortfolio();
+  const { data } = usePortfolio();
+  const { theme3d, updateTheme } = useTheme3d();
   const { config, navLinks } = data;
-  const isLight = data.theme3d.colorMode === "light";
+  const isLight = theme3d.colorMode === "light";
   const [active, setActive] = useState<string | null>();
   const [toggle, setToggle] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -17,16 +19,16 @@ const Navbar = () => {
   const toggleColorMode = () => {
     const next = isLight ? "dark" : "light";
     const tokens = resolveThemeTokens({
-      palette: data.theme3d.palette,
+      palette: theme3d.palette,
       colorMode: next,
     });
-    updateData({
-      theme3d: clampTheme3d({
-        ...data.theme3d,
-        colorMode: next,
-        starsColor: tokens.starsDefault,
-      }),
-    });
+    const partial = {
+      colorMode: next as "dark" | "light",
+      starsColor: tokens.starsDefault,
+    };
+    // Paint CSS immediately so the UI does not wait on React/WebGL commit
+    applyPaletteToDocument(clampTheme3d({ ...theme3d, ...partial }));
+    updateTheme(partial);
   };
 
   useEffect(() => {
