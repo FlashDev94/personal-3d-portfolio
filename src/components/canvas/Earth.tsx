@@ -1,9 +1,17 @@
-import { Suspense } from "react";
+import React, { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Preload, useGLTF } from "@react-three/drei";
 
 import CanvasLoader from "../layout/Loader";
 import ErrorBoundary from "../layout/ErrorBoundary";
+
+export type EarthCanvasProps = {
+  autoRotate?: boolean;
+  motionSpeed?: number;
+  allowOrbit?: boolean;
+  dpr?: [number, number];
+  antialias?: boolean;
+};
 
 const Earth = () => {
   const earth = useGLTF("./planet/scene.gltf");
@@ -13,19 +21,45 @@ const Earth = () => {
   );
 };
 
-useGLTF.preload("./planet/scene.gltf");
+// Defer planet preload until contact section is near paint time
+if (typeof window !== "undefined") {
+  const preload = () => {
+    try {
+      useGLTF.preload("./planet/scene.gltf");
+    } catch {
+      /* ignore */
+    }
+  };
+  const w = window as Window & {
+    requestIdleCallback?: (
+      cb: () => void,
+      opts?: { timeout: number }
+    ) => number;
+  };
+  if (typeof w.requestIdleCallback === "function") {
+    w.requestIdleCallback(preload, { timeout: 4000 });
+  } else {
+    window.setTimeout(preload, 1200);
+  }
+}
 
-const EarthCanvas = () => {
+const EarthCanvas: React.FC<EarthCanvasProps> = ({
+  autoRotate = true,
+  motionSpeed = 1,
+  allowOrbit = true,
+  dpr = [1, 1.5],
+  antialias = true,
+}) => {
   return (
     <ErrorBoundary name="Globe">
       <div className="h-full w-full">
         <Canvas
           shadows
-          frameloop="demand"
-          dpr={[1, 1.5]}
+          frameloop={autoRotate ? "always" : "demand"}
+          dpr={dpr}
           gl={{
             preserveDrawingBuffer: true,
-            antialias: true,
+            antialias,
             alpha: true,
             powerPreference: "high-performance",
             failIfMajorPerformanceCaveat: false,
@@ -43,9 +77,11 @@ const EarthCanvas = () => {
         >
           <Suspense fallback={<CanvasLoader />}>
             <OrbitControls
-              autoRotate
+              autoRotate={autoRotate}
+              autoRotateSpeed={motionSpeed}
               enablePan={false}
               enableZoom={false}
+              enableRotate={allowOrbit}
               maxPolarAngle={Math.PI / 2}
               minPolarAngle={Math.PI / 2}
             />

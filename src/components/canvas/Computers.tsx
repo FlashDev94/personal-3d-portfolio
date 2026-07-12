@@ -5,6 +5,17 @@ import { OrbitControls, Preload, useGLTF } from "@react-three/drei";
 import CanvasLoader from "../layout/Loader";
 import ErrorBoundary from "../layout/ErrorBoundary";
 
+export type ComputersCanvasProps = {
+  autoRotate?: boolean;
+  motionSpeed?: number;
+  allowOrbit?: boolean;
+  dpr?: [number, number];
+  shadows?: boolean;
+  antialias?: boolean;
+  /** Force-show on small screens (default: hide on mobile). */
+  forceMobile?: boolean;
+};
+
 const Computers: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
   const computer = useGLTF("./desktop_pc/scene.gltf");
 
@@ -30,10 +41,37 @@ const Computers: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
   );
 };
 
-// Preload so remounts (StrictMode / resize) reuse the cache
-useGLTF.preload("./desktop_pc/scene.gltf");
+// Defer GLTF preload until after first paint so boot/UI stays snappy
+if (typeof window !== "undefined") {
+  const preload = () => {
+    try {
+      useGLTF.preload("./desktop_pc/scene.gltf");
+    } catch {
+      /* ignore */
+    }
+  };
+  const w = window as Window & {
+    requestIdleCallback?: (
+      cb: () => void,
+      opts?: { timeout: number }
+    ) => number;
+  };
+  if (typeof w.requestIdleCallback === "function") {
+    w.requestIdleCallback(preload, { timeout: 2000 });
+  } else {
+    window.setTimeout(preload, 400);
+  }
+}
 
-const ComputersCanvas = () => {
+const ComputersCanvas: React.FC<ComputersCanvasProps> = ({
+  autoRotate = false,
+  motionSpeed = 1,
+  allowOrbit = true,
+  dpr = [1, 1.5],
+  shadows = true,
+  antialias = true,
+  forceMobile = false,
+}) => {
   const [isMobile, setIsMobile] = useState(false);
   const [webglOk, setWebglOk] = useState(true);
 
@@ -51,7 +89,6 @@ const ComputersCanvas = () => {
     };
   }, []);
 
-  // Skip WebGL entirely on mobile (original behavior) or when context is unavailable
   useEffect(() => {
     try {
       const canvas = document.createElement("canvas");
@@ -63,7 +100,8 @@ const ComputersCanvas = () => {
     }
   }, []);
 
-  if (isMobile || !webglOk) {
+  // Heavy GLTF stays off on narrow screens unless explicitly forced
+  if ((!forceMobile && isMobile) || !webglOk) {
     return null;
   }
 
@@ -76,13 +114,13 @@ const ComputersCanvas = () => {
     >
       <div className="absolute inset-0 h-full w-full">
         <Canvas
-          frameloop="demand"
-          shadows
-          dpr={[1, 1.5]}
+          frameloop={autoRotate ? "always" : "demand"}
+          shadows={shadows}
+          dpr={dpr}
           camera={{ position: [20, 3, 5], fov: 25 }}
           gl={{
             preserveDrawingBuffer: true,
-            antialias: true,
+            antialias,
             alpha: true,
             powerPreference: "high-performance",
             failIfMajorPerformanceCaveat: false,
@@ -96,6 +134,9 @@ const ComputersCanvas = () => {
             <OrbitControls
               enablePan={false}
               enableZoom={false}
+              enableRotate={allowOrbit}
+              autoRotate={autoRotate}
+              autoRotateSpeed={0.5 * motionSpeed}
               maxPolarAngle={Math.PI / 2}
               minPolarAngle={Math.PI / 2}
             />
