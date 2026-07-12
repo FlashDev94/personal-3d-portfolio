@@ -2,6 +2,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import type { TPortfolioData } from "../types/portfolio";
 import { defaultPortfolioData } from "../constants/defaults";
 import {
+  inferExperienceSubtitle,
   resolveCompanyIcon,
   resolveProjectImage,
   resolveServiceIcon,
@@ -191,14 +192,27 @@ export function parseResumeText(text: string): TPortfolioData {
     navLinks: defaultPortfolioData.navLinks,
     services,
     technologies,
-    experiences: experiences.map((exp, index) => ({
-      title: exp.title,
-      companyName: exp.companyName,
-      icon: resolveCompanyIcon(exp.companyName, index),
-      iconBg: iconBgs[index % iconBgs.length],
-      date: exp.date,
-      points: exp.points,
-    })),
+    experiences: experiences.map((exp, index) => {
+      const location =
+        "location" in exp && typeof exp.location === "string"
+          ? exp.location
+          : "";
+      const subtitle = inferExperienceSubtitle(
+        exp.title,
+        exp.points,
+        exp.companyName
+      );
+      return {
+        title: exp.title,
+        companyName: exp.companyName,
+        icon: resolveCompanyIcon(exp.companyName, index),
+        iconBg: iconBgs[index % iconBgs.length],
+        date: exp.date,
+        location: location || undefined,
+        subtitle,
+        points: exp.points,
+      };
+    }),
     testimonials: [],
     projects: projects.map((p, index) => ({
       name: p.name,
@@ -219,6 +233,8 @@ export function parseResumeText(text: string): TPortfolioData {
       linkedin: contact.linkedin,
       github: contact.github,
     },
+    // Keep default 3D theme when filling content from a resume
+    theme3d: { ...defaultPortfolioData.theme3d },
   };
 
   return portfolio;

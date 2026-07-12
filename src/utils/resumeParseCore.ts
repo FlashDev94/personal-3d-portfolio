@@ -266,6 +266,16 @@ function isBullet(s: string): boolean {
   return /^[•\-\u2013\u2014*]/.test(s);
 }
 
+function cleanCompanyName(name: string): string {
+  return name
+    .replace(
+      /\s*(Pvt\.?\s*Ltd\.?|Private\s+Limited|Inc\.?|LLC|Ltd\.?|Corp\.?|Corporation)\.?\s*$/i,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function parseExperience(section: string) {
   if (!section.trim()) return [];
   const lines = section
@@ -277,6 +287,7 @@ export function parseExperience(section: string) {
     title: string;
     companyName: string;
     date: string;
+    location: string;
     points: string[];
   }[] = [];
 
@@ -300,6 +311,7 @@ export function parseExperience(section: string) {
     const { text: companyFromDateLine, date } = stripDateFromLine(lines[dateIdx]);
     let companyName = companyFromDateLine || "Company";
     let title = "Role";
+    let location = "";
 
     const before = lines.slice(Math.max(i, dateIdx - 2), dateIdx);
     if (!companyFromDateLine && before[0]) {
@@ -325,6 +337,7 @@ export function parseExperience(section: string) {
       }
 
       if (isLocationLine(line)) {
+        location = line.trim();
         k++;
         continue;
       }
@@ -332,6 +345,7 @@ export function parseExperience(section: string) {
       if (ROLE_RE.test(line) || title === "Role") {
         const split = splitTitleAndLocation(line);
         if (split.title) title = split.title;
+        if (split.location) location = split.location;
         k++;
         if (ROLE_RE.test(split.title)) break;
         continue;
@@ -349,7 +363,9 @@ export function parseExperience(section: string) {
         (l) => l && ROLE_RE.test(l) && !DATE_RANGE.test(l)
       );
       if (roleLine) {
-        title = splitTitleAndLocation(roleLine).title;
+        const split = splitTitleAndLocation(roleLine);
+        title = split.title;
+        if (split.location && !location) location = split.location;
       }
     }
 
@@ -386,7 +402,9 @@ export function parseExperience(section: string) {
       ) {
         points[points.length - 1] += " " + line;
       } else if (ROLE_RE.test(line) && title === "Role") {
-        title = splitTitleAndLocation(line).title;
+        const split = splitTitleAndLocation(line);
+        title = split.title;
+        if (split.location && !location) location = split.location;
       } else if (
         !isLocationLine(line) &&
         !ROLE_RE.test(line) &&
@@ -401,8 +419,11 @@ export function parseExperience(section: string) {
     experiences.push({
       title: title.replace(/^[•\-\u2013\u2014*]\s*/, "").trim() || "Role",
       companyName:
-        companyName.replace(/^[•\-\u2013\u2014*]\s*/, "").trim() || "Company",
+        cleanCompanyName(
+          companyName.replace(/^[•\-\u2013\u2014*]\s*/, "").trim()
+        ) || "Company",
       date: date || "Present",
+      location,
       points: points.length
         ? points
         : ["Contributed to product delivery and engineering excellence."],

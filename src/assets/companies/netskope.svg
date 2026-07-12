@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Netskope">
+  <rect width="128" height="128" rx="28" fill="#0B1F33"/>
+  <path d="M28 84 L64 28 L100 84 Z" fill="none" stroke="#00A3E0" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="64" cy="62" r="14" fill="#00A3E0"/>
+  <path d="M40 90h48" stroke="#7DD3FC" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Cedcoss">
+  <rect width="128" height="128" rx="28" fill="#1A1030"/>
+  <circle cx="64" cy="58" r="26" fill="none" stroke="#A78BFA" stroke-width="8"/>
+  <path d="M48 58h32M64 42v32" stroke="#C4B5FD" stroke-width="6" stroke-linecap="round"/>
+  <text x="64" y="108" text-anchor="middle" fill="#E9D5FF" font-size="14" font-family="Arial,Helvetica,sans-serif" font-weight="700">CEDCOSS</text>
+</svg>
