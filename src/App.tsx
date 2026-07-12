@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { BrowserRouter } from "react-router-dom";
 
 import { Hero, Navbar } from "./components";
@@ -44,6 +44,13 @@ const PortfolioShell = () => {
 
   const onBootFinished = useCallback(() => setBootDone(true), []);
 
+  // Absolute fail-safe: never leave the portfolio invisible if boot hangs
+  useEffect(() => {
+    if (bootDone) return;
+    const t = window.setTimeout(() => setBootDone(true), 10000);
+    return () => window.clearTimeout(t);
+  }, [bootDone]);
+
   const showStars =
     bootDone && runtime.webglEnabled && data.theme3d.showStars;
 
@@ -61,6 +68,7 @@ const PortfolioShell = () => {
           className={`bg-primary relative z-0 min-h-screen transition-opacity duration-500 ${
             bootDone ? "opacity-100" : "opacity-0"
           }`}
+          aria-hidden={!bootDone}
         >
           <div
             className="relative bg-cover bg-center bg-no-repeat"

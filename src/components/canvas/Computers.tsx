@@ -41,28 +41,6 @@ const Computers: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
   );
 };
 
-// Defer GLTF preload until after first paint so boot/UI stays snappy
-if (typeof window !== "undefined") {
-  const preload = () => {
-    try {
-      useGLTF.preload("./desktop_pc/scene.gltf");
-    } catch {
-      /* ignore */
-    }
-  };
-  const w = window as Window & {
-    requestIdleCallback?: (
-      cb: () => void,
-      opts?: { timeout: number }
-    ) => number;
-  };
-  if (typeof w.requestIdleCallback === "function") {
-    w.requestIdleCallback(preload, { timeout: 2000 });
-  } else {
-    window.setTimeout(preload, 400);
-  }
-}
-
 const ComputersCanvas: React.FC<ComputersCanvasProps> = ({
   autoRotate = false,
   motionSpeed = 1,
@@ -97,6 +75,15 @@ const ComputersCanvas: React.FC<ComputersCanvasProps> = ({
       if (!gl) setWebglOk(false);
     } catch {
       setWebglOk(false);
+    }
+  }, []);
+
+  // Preload only when this canvas is actually mounted (not for neon/abstract/none)
+  useEffect(() => {
+    try {
+      useGLTF.preload("./desktop_pc/scene.gltf");
+    } catch {
+      /* ignore */
     }
   }, []);
 

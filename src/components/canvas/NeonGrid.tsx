@@ -1,8 +1,7 @@
-import React, { Suspense, useMemo, useRef } from "react";
+import React, { Suspense, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Preload } from "@react-three/drei";
 import type { Group } from "three";
-import * as THREE from "three";
 
 import CanvasLoader from "../layout/Loader";
 import ErrorBoundary from "../layout/ErrorBoundary";
@@ -23,12 +22,6 @@ const GridWorld: React.FC<{
 }> = ({ accent, autoRotate, motionSpeed }) => {
   const group = useRef<Group>(null);
 
-  const grid = useMemo(() => {
-    const size = 20;
-    const divisions = 20;
-    return new THREE.GridHelper(size, divisions, accent, "#1e1b2e");
-  }, [accent]);
-
   useFrame((_state, delta) => {
     if (!autoRotate || !group.current) return;
     group.current.rotation.y += delta * 0.12 * (motionSpeed || 1);
@@ -36,7 +29,8 @@ const GridWorld: React.FC<{
 
   return (
     <group ref={group} position={[0, -1.2, 0]} rotation={[0.15, 0, 0]}>
-      <primitive object={grid} />
+      {/* Declarative helper so R3F disposes geometry/materials on accent change */}
+      <gridHelper args={[20, 20, accent, "#1e1b2e"]} />
       <mesh position={[0, 0.6, 0]}>
         <boxGeometry args={[0.8, 0.8, 0.8]} />
         <meshStandardMaterial
