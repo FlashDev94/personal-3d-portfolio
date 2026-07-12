@@ -746,3 +746,28 @@ html[data-mode="light"] .holo-card__desc {
       -2.6em 0em 0 0em rgba(255, 255, 255, 0.7), -1.8em -1.8em 0 0em #ffffff;
   }
 }
+
+
+/* Skill balls — mode via data-mode so Tech section need not re-render on theme */
+.tech-ball {
+  background: radial-gradient(circle at 30% 25%, #2a2540 0%, #151030 55%, #0b0918 100%);
+  border-color: var(--color-border);
+}
+html[data-mode="light"] .tech-ball {
+  background: radial-gradient(circle at 30% 25%, #ffffff 0%, #eef2ff 55%, #e2e8f0 100%);
+}
+
+
+/* Hero accent stem — follows data-mode without React re-render */
+.hero-accent-line {
+  background: linear-gradient(-90deg, var(--accent) 0%, rgba(60, 51, 80, 0) 100%);
+}
+html[data-mode="light"] .hero-accent-line {
+  background: linear-gradient(-90deg, var(--accent) 0%, rgba(243, 245, 251, 0) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-only {
+    animation: none !important;
+  }
+}

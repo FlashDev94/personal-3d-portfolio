@@ -7,7 +7,6 @@ import { SectionWrapper } from "../../hoc";
 import { slideIn } from "../../utils/motion";
 import { Header } from "../atoms/Header";
 import { usePortfolio } from "../../context/PortfolioContext";
-import { useThemeRuntime } from "../../utils/themeRuntime";
 
 const emailjsConfig = {
   serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -18,7 +17,6 @@ const emailjsConfig = {
 const Contact = () => {
   const { data } = usePortfolio();
   const { config } = data;
-  const runtime = useThemeRuntime(data.theme3d);
   const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState({ name: "", email: "", message: "" });
   const [loading, setLoading] = useState(false);
@@ -109,7 +107,7 @@ const Contact = () => {
     data.meta.linkedin ||
     data.meta.github;
 
-  const accent = runtime.palette.accent;
+  const accent = "var(--accent)";
 
   return (
     <div className="flex flex-col-reverse gap-10 overflow-hidden xl:mt-12 xl:flex-row xl:items-stretch">

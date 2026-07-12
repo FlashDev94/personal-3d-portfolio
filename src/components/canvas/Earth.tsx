@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import React, { memo, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Preload, useGLTF } from "@react-three/drei";
 
@@ -94,4 +94,4 @@ const EarthCanvas: React.FC<EarthCanvasProps> = ({
   );
 };
 
-export default EarthCanvas;
+export default memo(EarthCanvas);

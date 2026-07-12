@@ -33,43 +33,41 @@ export function resolveReduceMotion(
 
 export function useThemeRuntime(theme: TTheme3d) {
   const systemReduced = usePrefersReducedMotion();
-  const reduceMotion = resolveReduceMotion(theme, systemReduced);
-  const quality: QualityProfile = QUALITY_PROFILES[theme.quality];
-  const tokens = resolveThemeTokens(theme);
 
-  const particleCount = useMemo(() => {
+  return useMemo(() => {
+    const reduceMotion = resolveReduceMotion(theme, systemReduced);
+    const quality: QualityProfile = QUALITY_PROFILES[theme.quality];
+    const tokens = resolveThemeTokens(theme);
     const base = quality.particleCount;
-    const density = theme.starsDensity;
-    const count = Math.round(base * density);
-    return Math.max(200, Math.min(4000, count));
-  }, [quality.particleCount, theme.starsDensity]);
+    const count = Math.round(base * theme.starsDensity);
+    const particleCount = Math.max(200, Math.min(4000, count));
+    const autoRotate = theme.autoRotate && !reduceMotion && theme.enabled;
+    const motionSpeed = reduceMotion ? 0 : theme.motionSpeed;
 
-  const autoRotate = theme.autoRotate && !reduceMotion && theme.enabled;
-  const motionSpeed = reduceMotion ? 0 : theme.motionSpeed;
-
-  return {
-    theme,
-    reduceMotion,
-    quality,
-    palette: {
-      id: tokens.palette.id,
-      label: tokens.palette.label,
-      description: tokens.palette.description,
-      accent: tokens.accent,
-      accentSoft: tokens.accentSoft,
-      starsDefault: tokens.starsDefault,
-    },
-    surface: tokens.surface,
-    isLight: tokens.isLight,
-    particleCount,
-    autoRotate,
-    motionSpeed,
-    dpr: quality.dpr,
-    shadows: quality.shadows && theme.quality !== "low",
-    antialias: quality.antialias,
-    allowOrbit: theme.allowOrbit && !reduceMotion,
-    webglEnabled: theme.enabled,
-  };
+    return {
+      theme,
+      reduceMotion,
+      quality,
+      palette: {
+        id: tokens.palette.id,
+        label: tokens.palette.label,
+        description: tokens.palette.description,
+        accent: tokens.accent,
+        accentSoft: tokens.accentSoft,
+        starsDefault: tokens.starsDefault,
+      },
+      surface: tokens.surface,
+      isLight: tokens.isLight,
+      particleCount,
+      autoRotate,
+      motionSpeed,
+      dpr: quality.dpr,
+      shadows: quality.shadows && theme.quality !== "low",
+      antialias: quality.antialias,
+      allowOrbit: theme.allowOrbit && !reduceMotion,
+      webglEnabled: theme.enabled,
+    };
+  }, [theme, systemReduced]);
 }
 
 /** Apply palette + surface CSS variables on document root. */

@@ -1,4 +1,4 @@
-import React, { Suspense, useRef } from "react";
+import React, { memo, Suspense, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Float, OrbitControls, Preload } from "@react-three/drei";
 import type { Mesh } from "three";
@@ -128,4 +128,4 @@ const AbstractCoreCanvas: React.FC<AbstractCoreProps> = ({
   );
 };
 
-export default AbstractCoreCanvas;
+export default memo(AbstractCoreCanvas);

@@ -4,7 +4,7 @@ import type {
   TPortfolioData,
   TTheme3d,
 } from "../../types/portfolio";
-import { usePortfolio } from "../../context/PortfolioContext";
+import { usePortfolioAll } from "../../context/PortfolioContext";
 import {
   parseResumeFile,
   parseResumeFromUrl,
@@ -57,29 +57,18 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-const PortfolioConfigurator: React.FC = () => {
+const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { data, replaceData, resetToDefaults, exportJson, importJson } =
-    usePortfolio();
-  const [open, setOpen] = useState(false);
+    usePortfolioAll();
   const [tab, setTab] = useState<ConfiguratorTab>("upload");
-  const [draft, setDraft] = useState<TPortfolioData>(data);
+  const [draft, setDraft] = useState<TPortfolioData>(() =>
+    deepClone({ ...data, theme3d: clampTheme3d(data.theme3d) })
+  );
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const openPanel = () => {
-    setDraft(
-      deepClone({
-        ...data,
-        theme3d: clampTheme3d(data.theme3d),
-      })
-    );
-    setStatus(null);
-    setError(null);
-    setOpen(true);
-  };
 
   const applyDraft = () => {
     replaceData(deepClone(draft));
@@ -183,28 +172,12 @@ const PortfolioConfigurator: React.FC = () => {
   };
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={openPanel}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105"
-        style={{
-          backgroundColor: "var(--accent, #915EFF)",
-          boxShadow: "0 10px 25px var(--accent-soft, rgba(145, 94, 255, 0.4))",
-        }}
-        aria-label="Customize portfolio"
-      >
-        <span className="text-base">⚙</span>
-        Customize
-      </button>
-
-      {open && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
           <button
             type="button"
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             aria-label="Close configurator backdrop"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
           />
 
           <div className="relative flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-primary shadow-2xl sm:h-[85vh] sm:rounded-2xl">
@@ -218,7 +191,7 @@ const PortfolioConfigurator: React.FC = () => {
               <button
                 type="button"
                 className={btnGhost}
-                onClick={() => setOpen(false)}
+                onClick={onClose}
               >
                 Close
               </button>
@@ -1592,7 +1565,7 @@ const PortfolioConfigurator: React.FC = () => {
                 Draft edits are local until you click Apply. Live site uses the applied config.
               </p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={btnGhost} onClick={() => setOpen(false)}>
+                <button type="button" className={btnGhost} onClick={onClose}>
                   Cancel
                 </button>
                 <button
@@ -1600,7 +1573,7 @@ const PortfolioConfigurator: React.FC = () => {
                   className={btnPrimary}
                   onClick={() => {
                     applyDraft();
-                    setOpen(false);
+                    onClose();
                   }}
                 >
                   Apply to portfolio
@@ -1609,9 +1582,36 @@ const PortfolioConfigurator: React.FC = () => {
             </footer>
           </div>
         </div>
-      )}
-    </>
   );
+};
+
+/** FAB only — no portfolio context subscription while closed. */
+const CustomizeFab: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
+  <button
+    type="button"
+    onClick={onOpen}
+    className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-105"
+    style={{
+      backgroundColor: "var(--accent, #915EFF)",
+      boxShadow: "0 10px 25px var(--accent-soft, rgba(145, 94, 255, 0.4))",
+    }}
+    aria-label="Customize portfolio"
+  >
+    <span className="text-base">⚙</span>
+    Customize
+  </button>
+);
+
+/**
+ * Mounts the heavy panel only when open so theme thrashing does not re-render
+ * the entire configurator tree.
+ */
+const PortfolioConfigurator: React.FC = () => {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return <CustomizeFab onOpen={() => setOpen(true)} />;
+  }
+  return <ConfiguratorPanel onClose={() => setOpen(false)} />;
 };
 
 export default PortfolioConfigurator;
