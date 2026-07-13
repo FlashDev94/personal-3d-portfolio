@@ -113,4 +113,5 @@ export type ConfiguratorTab =
   | "projects"
   | "testimonials"
   | "theme3d"
+  | "history"
   | "data";

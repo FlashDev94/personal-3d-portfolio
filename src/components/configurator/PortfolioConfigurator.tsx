@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConfiguratorTab,
   TPortfolioData,
@@ -29,6 +29,13 @@ import {
   defaultTheme3d,
   resolveThemeTokens,
 } from "../../constants/theme3d";
+import { useDraftHistory } from "../../hooks/useDraftHistory";
+import {
+  clonePortfolio,
+  loadPersistedDraft,
+  portfolioFingerprint,
+  type DraftCommitOptions,
+} from "../../utils/history";
 
 const TABS: { id: ConfiguratorTab; label: string }[] = [
   { id: "upload", label: "Resume Upload" },
@@ -39,6 +46,7 @@ const TABS: { id: ConfiguratorTab; label: string }[] = [
   { id: "projects", label: "Projects" },
   { id: "testimonials", label: "Testimonials" },
   { id: "theme3d", label: "3D & Theme" },
+  { id: "history", label: "History" },
   { id: "data", label: "Import / Export" },
 ];
 const fieldClass =
@@ -53,26 +61,121 @@ const btnGhost =
 const btnDanger =
   "rounded-xl border border-red-400/40 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/10";
 
-function deepClone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+function formatWhen(at: number): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(at));
+  } catch {
+    return new Date(at).toLocaleString();
+  }
+}
+
+function buildInitialDraft(live: TPortfolioData): {
+  draft: TPortfolioData;
+  restored: boolean;
+  baseFingerprint: string;
+} {
+  const liveClamped = {
+    ...live,
+    theme3d: clampTheme3d(live.theme3d),
+  };
+  const liveFp = portfolioFingerprint(liveClamped);
+  const persisted = loadPersistedDraft();
+  if (
+    persisted &&
+    portfolioFingerprint(persisted.data) !== liveFp
+  ) {
+    return {
+      draft: {
+        ...persisted.data,
+        theme3d: clampTheme3d(persisted.data.theme3d),
+      },
+      restored: true,
+      baseFingerprint: persisted.baseFingerprint || liveFp,
+    };
+  }
+  return {
+    draft: clonePortfolio(liveClamped),
+    restored: false,
+    baseFingerprint: liveFp,
+  };
 }
 
 const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { data, replaceData, resetToDefaults, exportJson, importJson } =
-    usePortfolioAll();
+  const {
+    data,
+    commitPortfolio,
+    resetToDefaults,
+    exportJson,
+    importJson,
+    liveFingerprint,
+    remoteUpdate,
+    acknowledgeRemoteUpdate,
+    versions,
+    restoreVersion,
+    deleteVersion,
+    refreshVersions,
+  } = usePortfolioAll();
+
+  const initialBundle = useMemo(() => buildInitialDraft(data), []);
+  const {
+    draft,
+    setDraft,
+    resetDraft,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    undoLabel,
+    redoLabel,
+    isDirty,
+    markClean,
+    flushHistory,
+    clearDraftPersistence,
+  } = useDraftHistory(initialBundle.draft, initialBundle.baseFingerprint);
+
   const [tab, setTab] = useState<ConfiguratorTab>("upload");
-  const [draft, setDraft] = useState<TPortfolioData>(() =>
-    deepClone({ ...data, theme3d: clampTheme3d(data.theme3d) })
+  const [status, setStatus] = useState<string | null>(() =>
+    initialBundle.restored
+      ? "Restored your unsaved draft from a previous session. Review and Apply when ready."
+      : null
   );
-  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /** Structural / heavy edits — one undo step each, available immediately. */
+  const commit = useCallback(
+    (
+      action: React.SetStateAction<TPortfolioData>,
+      label: string,
+      options?: Omit<DraftCommitOptions, "immediate" | "label">
+    ) => {
+      setDraft(action, { ...options, immediate: true, label });
+    },
+    [setDraft]
+  );
+
   const applyDraft = () => {
-    replaceData(deepClone(draft));
-    setStatus("Portfolio updated and saved to this browser.");
+    flushHistory();
+    commitPortfolio(clonePortfolio(draft), "Applied from configurator");
+    markClean(portfolioFingerprint(draft));
+    clearDraftPersistence();
+    refreshVersions();
+    setStatus("Portfolio updated, saved, and added to version history.");
+    setError(null);
+  };
+
+  const discardDraftToLive = () => {
+    resetDraft(
+      { ...data, theme3d: clampTheme3d(data.theme3d) },
+      { baseFingerprint: liveFingerprint }
+    );
+    acknowledgeRemoteUpdate();
+    setStatus("Draft reloaded from the live portfolio.");
     setError(null);
   };
 
@@ -87,13 +190,16 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setStatus(null);
     try {
       const parsed = await parseResumeFile(file);
-      setDraft((prev) => ({
-        ...parsed,
-        // Keep current 3D theme when filling content from a resume
-        theme3d: clampTheme3d(prev.theme3d),
-      }));
+      commit(
+        (prev) => ({
+          ...parsed,
+          // Keep current 3D theme when filling content from a resume
+          theme3d: clampTheme3d(prev.theme3d),
+        }),
+        `Resume upload: ${file.name}`
+      );
       setStatus(
-        `Parsed “${file.name}” successfully. Review the tabs, tweak anything, then click Apply.`
+        `Parsed “${file.name}” successfully. Undo restores your previous draft. Review tabs, then Apply.`
       );
       setTab("profile");
     } catch (err) {
@@ -109,12 +215,15 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setStatus(null);
     try {
       const parsed = await parseResumeFromUrl("/sample-resume.pdf");
-      setDraft((prev) => ({
-        ...parsed,
-        theme3d: clampTheme3d(prev.theme3d),
-      }));
+      commit(
+        (prev) => ({
+          ...parsed,
+          theme3d: clampTheme3d(prev.theme3d),
+        }),
+        "Sample resume loaded"
+      );
       setStatus(
-        "Sample resume loaded (Pradeep Singh). Review tabs and click Apply to update the portfolio."
+        "Sample resume loaded (Pradeep Singh). Undo restores your previous draft. Review tabs and Apply."
       );
       setTab("profile");
     } catch (err) {
@@ -134,15 +243,26 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }));
   };
 
-  const updateTheme = <K extends keyof TTheme3d>(key: K, value: TTheme3d[K]) => {
-    setDraft((prev) => ({
+  /** Discrete theme toggles / scene picks — immediate undo step. */
+  const updateTheme = <K extends keyof TTheme3d>(
+    key: K,
+    value: TTheme3d[K],
+    options?: { immediate?: boolean }
+  ) => {
+    const immediate = options?.immediate !== false;
+    const apply = (prev: TPortfolioData) => ({
       ...prev,
       theme3d: clampTheme3d({ ...prev.theme3d, [key]: value }),
-    }));
+    });
+    if (immediate) {
+      commit(apply, `Theme: ${String(key)}`);
+    } else {
+      setDraft(apply, { label: `Theme: ${String(key)}` });
+    }
   };
 
   const applyPalettePreset = (paletteId: TTheme3d["palette"]) => {
-    setDraft((prev) => {
+    commit((prev) => {
       const mode = prev.theme3d?.colorMode ?? "dark";
       const tokens = resolveThemeTokens({ palette: paletteId, colorMode: mode });
       return {
@@ -153,11 +273,11 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           starsColor: tokens.starsDefault,
         }),
       };
-    });
+    }, `Palette: ${paletteId}`);
   };
 
   const applyColorMode = (colorMode: TTheme3d["colorMode"]) => {
-    setDraft((prev) => {
+    commit((prev) => {
       const paletteId = prev.theme3d?.palette ?? "violet";
       const tokens = resolveThemeTokens({ palette: paletteId, colorMode });
       return {
@@ -168,8 +288,61 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           starsColor: tokens.starsDefault,
         }),
       };
-    });
+    }, `Color mode: ${colorMode}`);
   };
+
+  // Keyboard undo/redo while the panel is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      // Allow Ctrl/Cmd+Z in fields too — that's the expected editor UX
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (undo()) setStatus(`Undo: ${undoLabel ?? "previous edit"}`);
+        return;
+      }
+      if (key === "z" && e.shiftKey) {
+        e.preventDefault();
+        if (redo()) setStatus(`Redo: ${redoLabel ?? "edit"}`);
+        return;
+      }
+      if (key === "y") {
+        e.preventDefault();
+        if (redo()) setStatus(`Redo: ${redoLabel ?? "edit"}`);
+        return;
+      }
+      // Avoid treating browser shortcuts in non-editable chrome oddly
+      void tag;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo, undoLabel, redoLabel]);
+
+  // Soft notice when another tab commits — never clobber a dirty draft
+  const remoteRev = remoteUpdate?.rev ?? null;
+  useEffect(() => {
+    if (!remoteUpdate || remoteRev == null) return;
+    if (isDirty) {
+      setStatus(
+        `Another tab applied “${remoteUpdate.label || "changes"}”. Your draft is preserved — reload from live or keep editing.`
+      );
+      return;
+    }
+    resetDraft(
+      { ...data, theme3d: clampTheme3d(data.theme3d) },
+      { baseFingerprint: remoteUpdate.fingerprint || liveFingerprint }
+    );
+    acknowledgeRemoteUpdate();
+    setStatus(
+      `Synced live portfolio from another tab (${remoteUpdate.label || "update"}).`
+    );
+    // Only react to new remote revisions — not every draft keystroke / liveFingerprint tick
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: remoteRev is the gate
+  }, [remoteRev]);
 
   return (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
@@ -181,21 +354,78 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           />
 
           <div className="relative flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-primary shadow-2xl sm:h-[85vh] sm:rounded-2xl">
-            <header className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <div>
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+              <div className="min-w-0">
                 <h2 className="text-lg font-bold text-white">Portfolio Configurator</h2>
                 <p className="text-xs text-secondary">
-                  Upload a resume or edit every section manually. Changes apply instantly after you click Apply.
+                  Draft edits are undoable. Apply saves to this browser, version history, and other open tabs.
+                  {isDirty ? (
+                    <span className="ml-1 font-semibold text-amber-300">Unsaved draft</span>
+                  ) : (
+                    <span className="ml-1 text-emerald-300/90">In sync with live site</span>
+                  )}
                 </p>
               </div>
-              <button
-                type="button"
-                className={btnGhost}
-                onClick={onClose}
-              >
-                Close
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={!canUndo}
+                  title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : "Nothing to undo"}
+                  onClick={() => {
+                    if (undo()) setStatus(`Undo: ${undoLabel ?? "previous edit"}`);
+                  }}
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={!canRedo}
+                  title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : "Nothing to redo"}
+                  onClick={() => {
+                    if (redo()) setStatus(`Redo: ${redoLabel ?? "edit"}`);
+                  }}
+                >
+                  Redo
+                </button>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  onClick={() => setTab("history")}
+                >
+                  History
+                </button>
+                <button
+                  type="button"
+                  className={btnGhost}
+                  onClick={onClose}
+                >
+                  Close
+                </button>
+              </div>
             </header>
+
+            {remoteUpdate && isDirty && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-100">
+                <span>
+                  Live portfolio changed in another tab
+                  {remoteUpdate.label ? ` (${remoteUpdate.label})` : ""}. Draft kept.
+                </span>
+                <div className="flex gap-2">
+                  <button type="button" className={btnGhost} onClick={discardDraftToLive}>
+                    Reload from live
+                  </button>
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    onClick={() => acknowledgeRemoteUpdate()}
+                  >
+                    Keep draft
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex min-h-0 flex-1 flex-col md:flex-row">
               <nav className="flex gap-1 overflow-x-auto border-b border-white/10 p-3 md:w-48 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r">
@@ -534,10 +764,13 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             type="button"
                             className={btnDanger}
                             onClick={() =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                services: prev.services.filter((_, i) => i !== index),
-                              }))
+                              commit(
+                                (prev) => ({
+                                  ...prev,
+                                  services: prev.services.filter((_, i) => i !== index),
+                                }),
+                                "Remove service"
+                              )
                             }
                           >
                             Remove
@@ -556,25 +789,28 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         type="button"
                         className={btnGhost}
                         onClick={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            experiences: [
-                              {
-                                title: "Software Engineer",
-                                companyName: "Company",
-                                icon: resolveCompanyIcon(
-                                  "Company",
-                                  prev.experiences.length
-                                ),
-                                iconBg: "#383E56",
-                                date: "Jan 2024 – Present",
-                                location: "",
-                                subtitle: "Product engineering · web platforms",
-                                points: ["Describe your impact here."],
-                              },
-                              ...prev.experiences,
-                            ],
-                          }))
+                          commit(
+                            (prev) => ({
+                              ...prev,
+                              experiences: [
+                                {
+                                  title: "Software Engineer",
+                                  companyName: "Company",
+                                  icon: resolveCompanyIcon(
+                                    "Company",
+                                    prev.experiences.length
+                                  ),
+                                  iconBg: "#383E56",
+                                  date: "Jan 2024 – Present",
+                                  location: "",
+                                  subtitle: "Product engineering · web platforms",
+                                  points: ["Describe your impact here."],
+                                },
+                                ...prev.experiences,
+                              ],
+                            }),
+                            "Add experience"
+                          )
                         }
                       >
                         + Add role
@@ -703,10 +939,13 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           type="button"
                           className={btnDanger}
                           onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              experiences: prev.experiences.filter((_, i) => i !== index),
-                            }))
+                            commit(
+                              (prev) => ({
+                                ...prev,
+                                experiences: prev.experiences.filter((_, i) => i !== index),
+                              }),
+                              "Remove experience"
+                            )
                           }
                         >
                           Remove role
@@ -724,16 +963,19 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         type="button"
                         className={btnGhost}
                         onClick={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            technologies: [
-                              ...prev.technologies,
-                              {
-                                name: "New Skill",
-                                icon: resolveTechIcon("New Skill"),
-                              },
-                            ],
-                          }))
+                          commit(
+                            (prev) => ({
+                              ...prev,
+                              technologies: [
+                                ...prev.technologies,
+                                {
+                                  name: "New Skill",
+                                  icon: resolveTechIcon("New Skill"),
+                                },
+                              ],
+                            }),
+                            "Add skill"
+                          )
                         }
                       >
                         + Add skill
@@ -753,13 +995,16 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             .split(",")
                             .map((s) => s.trim())
                             .filter(Boolean);
-                          setDraft((prev) => ({
-                            ...prev,
-                            technologies: names.map((name) => ({
-                              name,
-                              icon: resolveTechIcon(name),
-                            })),
-                          }));
+                          setDraft(
+                            (prev) => ({
+                              ...prev,
+                              technologies: names.map((name) => ({
+                                name,
+                                icon: resolveTechIcon(name),
+                              })),
+                            }),
+                            { label: "Bulk edit skills" }
+                          );
                         }}
                       />
                     </div>
@@ -811,7 +1056,8 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                 }
                                 onChange={(e) => {
                                   const value = e.target.value;
-                                  setDraft((prev) => {
+                                  if (value === "custom") return;
+                                  commit((prev) => {
                                     const technologies = [...prev.technologies];
                                     if (value === "auto") {
                                       technologies[index] = {
@@ -826,8 +1072,6 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                           "#151030"
                                         ),
                                       };
-                                    } else if (value === "custom") {
-                                      // keep current
                                     } else {
                                       const opt = TECH_ICON_OPTIONS.find((o) => o.id === value);
                                       if (opt) {
@@ -838,7 +1082,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                       }
                                     }
                                     return { ...prev, technologies };
-                                  });
+                                  }, "Change skill icon");
                                 }}
                               >
                                 <option value="auto">Auto-resolve from name</option>
@@ -869,14 +1113,14 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                     }
                                     try {
                                       const dataUrl = await fileToDataUrl(file);
-                                      setDraft((prev) => {
+                                      commit((prev) => {
                                         const technologies = [...prev.technologies];
                                         technologies[index] = {
                                           ...technologies[index],
                                           icon: dataUrl,
                                         };
                                         return { ...prev, technologies };
-                                      });
+                                      }, "Upload skill icon");
                                       setError(null);
                                     } catch {
                                       setError("Failed to read icon image.");
@@ -915,10 +1159,13 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             type="button"
                             className={btnDanger}
                             onClick={() =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                technologies: prev.technologies.filter((_, i) => i !== index),
-                              }))
+                              commit(
+                                (prev) => ({
+                                  ...prev,
+                                  technologies: prev.technologies.filter((_, i) => i !== index),
+                                }),
+                                "Remove skill"
+                              )
                             }
                           >
                             Remove
@@ -937,7 +1184,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         type="button"
                         className={btnGhost}
                         onClick={() =>
-                          setDraft((prev) => {
+                          commit((prev) => {
                             const name = "New Project";
                             return {
                               ...prev,
@@ -954,7 +1201,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                 },
                               ],
                             };
-                          })
+                          }, "Add project")
                         }
                       >
                         + Add project
@@ -1068,10 +1315,13 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           type="button"
                           className={btnDanger}
                           onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              projects: prev.projects.filter((_, i) => i !== index),
-                            }))
+                            commit(
+                              (prev) => ({
+                                ...prev,
+                                projects: prev.projects.filter((_, i) => i !== index),
+                              }),
+                              "Remove project"
+                            )
                           }
                         >
                           Remove project
@@ -1089,19 +1339,22 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         type="button"
                         className={btnGhost}
                         onClick={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            testimonials: [
-                              ...prev.testimonials,
-                              {
-                                testimonial: "Great collaborator and engineer.",
-                                name: "Colleague",
-                                designation: "Manager",
-                                company: "Company",
-                                image: makeInitialsIcon("Colleague", "#915EFF"),
-                              },
-                            ],
-                          }))
+                          commit(
+                            (prev) => ({
+                              ...prev,
+                              testimonials: [
+                                ...prev.testimonials,
+                                {
+                                  testimonial: "Great collaborator and engineer.",
+                                  name: "Colleague",
+                                  designation: "Manager",
+                                  company: "Company",
+                                  image: makeInitialsIcon("Colleague", "#915EFF"),
+                                },
+                              ],
+                            }),
+                            "Add testimonial"
+                          )
                         }
                       >
                         + Add testimonial
@@ -1165,10 +1418,13 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           type="button"
                           className={btnDanger}
                           onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              testimonials: prev.testimonials.filter((_, i) => i !== index),
-                            }))
+                            commit(
+                              (prev) => ({
+                                ...prev,
+                                testimonials: prev.testimonials.filter((_, i) => i !== index),
+                              }),
+                              "Remove testimonial"
+                            )
                           }
                         >
                           Remove
@@ -1372,7 +1628,9 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             step={0.05}
                             value={draft.theme3d?.motionSpeed ?? 1}
                             onChange={(e) =>
-                              updateTheme("motionSpeed", Number(e.target.value))
+                              updateTheme("motionSpeed", Number(e.target.value), {
+                                immediate: false,
+                              })
                             }
                             className="w-full accent-[#915EFF]"
                           />
@@ -1389,7 +1647,9 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             step={0.05}
                             value={draft.theme3d?.starsDensity ?? 1}
                             onChange={(e) =>
-                              updateTheme("starsDensity", Number(e.target.value))
+                              updateTheme("starsDensity", Number(e.target.value), {
+                                immediate: false,
+                              })
                             }
                             className="w-full accent-[#915EFF]"
                           />
@@ -1402,7 +1662,11 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           <input
                             type="color"
                             value={draft.theme3d?.starsColor || "#f272c8"}
-                            onChange={(e) => updateTheme("starsColor", e.target.value)}
+                            onChange={(e) =>
+                              updateTheme("starsColor", e.target.value, {
+                                immediate: false,
+                              })
+                            }
                             className="h-10 w-full cursor-pointer rounded border border-white/10 bg-transparent"
                           />
                         </div>
@@ -1453,14 +1717,190 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         type="button"
                         className={btnGhost}
                         onClick={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            theme3d: { ...defaultTheme3d },
-                          }))
+                          commit(
+                            (prev) => ({
+                              ...prev,
+                              theme3d: { ...defaultTheme3d },
+                            }),
+                            "Reset theme to defaults"
+                          )
                         }
                       >
                         Reset theme to defaults
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {tab === "history" && (
+                  <div className="space-y-4">
+                    <div className={sectionCard}>
+                      <h3 className="font-semibold text-white">Draft undo / redo</h3>
+                      <p className="text-sm text-secondary">
+                        Session history for this panel. Typing is coalesced into one step after a
+                        short pause. Resume uploads, JSON import, icons, and theme picks create an
+                        immediate step. Shortcuts:{" "}
+                        <kbd className="rounded bg-white/10 px-1">Ctrl</kbd>+
+                        <kbd className="rounded bg-white/10 px-1">Z</kbd> undo,{" "}
+                        <kbd className="rounded bg-white/10 px-1">Ctrl</kbd>+
+                        <kbd className="rounded bg-white/10 px-1">Y</kbd> redo.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          disabled={!canUndo}
+                          onClick={() => {
+                            if (undo()) setStatus(`Undo: ${undoLabel ?? "previous edit"}`);
+                          }}
+                        >
+                          Undo{undoLabel ? `: ${undoLabel}` : ""}
+                        </button>
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          disabled={!canRedo}
+                          onClick={() => {
+                            if (redo()) setStatus(`Redo: ${redoLabel ?? "edit"}`);
+                          }}
+                        >
+                          Redo{redoLabel ? `: ${redoLabel}` : ""}
+                        </button>
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          disabled={!isDirty}
+                          onClick={discardDraftToLive}
+                        >
+                          Discard draft → live
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={sectionCard}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="font-semibold text-white">Applied version history</h3>
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          onClick={() => refreshVersions()}
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                      <p className="text-sm text-secondary">
+                        Snapshots are created when you Apply, import JSON, reset, or restore a
+                        version. Shared across tabs via this browser&apos;s storage (newest last).
+                      </p>
+                      {versions.length === 0 ? (
+                        <p className="text-sm text-secondary">
+                          No versions yet. Apply your draft to create the first snapshot.
+                        </p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {[...versions].reverse().map((entry, index) => {
+                            const isLatest = index === 0;
+                            return (
+                              <li
+                                key={entry.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black-200/40 px-3 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium text-white">
+                                    {entry.label}
+                                    {isLatest ? (
+                                      <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                                        latest
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-xs text-secondary">
+                                    {formatWhen(entry.at)}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className={btnPrimary}
+                                    onClick={() => {
+                                      // Load into draft first so user can review / undo before Apply
+                                      commit(
+                                        () => ({
+                                          ...entry.data,
+                                          theme3d: clampTheme3d(entry.data.theme3d),
+                                        }),
+                                        `Load version: ${entry.label}`
+                                      );
+                                      setStatus(
+                                        `Loaded “${entry.label}” into draft. Apply to make it live, or Undo to go back.`
+                                      );
+                                      setError(null);
+                                    }}
+                                  >
+                                    Load to draft
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={btnGhost}
+                                    onClick={() => {
+                                      if (
+                                        !window.confirm(
+                                          `Restore “${entry.label}” to the live portfolio now?`
+                                        )
+                                      ) {
+                                        return;
+                                      }
+                                      const ok = restoreVersion(entry.id);
+                                      if (!ok) {
+                                        setError("Could not restore that version.");
+                                        return;
+                                      }
+                                      const restored = versions.find((v) => v.id === entry.id);
+                                      if (restored) {
+                                        resetDraft(
+                                          {
+                                            ...restored.data,
+                                            theme3d: clampTheme3d(restored.data.theme3d),
+                                          },
+                                          {
+                                            baseFingerprint: portfolioFingerprint(
+                                              restored.data
+                                            ),
+                                          }
+                                        );
+                                      } else {
+                                        discardDraftToLive();
+                                      }
+                                      setStatus(`Restored live portfolio: ${entry.label}`);
+                                      setError(null);
+                                      refreshVersions();
+                                    }}
+                                  >
+                                    Restore live
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={btnDanger}
+                                    onClick={() => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete version “${entry.label}” from history?`
+                                        )
+                                      ) {
+                                        return;
+                                      }
+                                      deleteVersion(entry.id);
+                                      setStatus("Version removed from history.");
+                                    }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1471,13 +1911,15 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                       <h3 className="font-semibold text-white">Export / import JSON</h3>
                       <p className="text-sm text-secondary">
                         Download your full portfolio configuration (including 3D & theme) or paste
-                        JSON from another device.
+                        JSON from another device. Import applies live, records a version, and
+                        updates this draft (undoable in the draft stack for further tweaks).
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           className={btnPrimary}
                           onClick={() => {
+                            flushHistory();
                             const text = JSON.stringify(draft, null, 2);
                             setJsonText(text);
                             const blob = new Blob([text], { type: "application/json" });
@@ -1506,35 +1948,72 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         value={jsonText}
                         onChange={(e) => setJsonText(e.target.value)}
                       />
-                      <button
-                        type="button"
-                        className={btnPrimary}
-                        onClick={() => {
-                          try {
-                            importJson(jsonText);
-                            const parsed = JSON.parse(jsonText) as TPortfolioData;
-                            setDraft(
-                              deepClone({
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnPrimary}
+                          onClick={() => {
+                            try {
+                              importJson(jsonText, "Imported JSON");
+                              const parsed = JSON.parse(jsonText) as TPortfolioData;
+                              const next = {
                                 ...parsed,
                                 theme3d: clampTheme3d(parsed.theme3d),
-                              })
-                            );
-                            setStatus("JSON imported and applied.");
-                            setError(null);
-                          } catch (err) {
-                            setError(
-                              err instanceof Error ? err.message : "Invalid JSON"
-                            );
-                          }
-                        }}
-                      >
-                        Import JSON
-                      </button>
+                              };
+                              // Record as draft checkpoint too so Undo can return to pre-import draft
+                              commit(() => next, "Import JSON into draft");
+                              markClean(portfolioFingerprint(next));
+                              clearDraftPersistence();
+                              refreshVersions();
+                              setStatus(
+                                "JSON imported, applied live, and recorded in version history."
+                              );
+                              setError(null);
+                            } catch (err) {
+                              setError(
+                                err instanceof Error ? err.message : "Invalid JSON"
+                              );
+                            }
+                          }}
+                        >
+                          Import JSON (apply live)
+                        </button>
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          onClick={() => {
+                            try {
+                              const parsed = JSON.parse(jsonText) as TPortfolioData;
+                              if (!parsed?.config) {
+                                throw new Error("Invalid portfolio JSON");
+                              }
+                              commit(
+                                () => ({
+                                  ...parsed,
+                                  theme3d: clampTheme3d(parsed.theme3d),
+                                }),
+                                "Import JSON into draft only"
+                              );
+                              setStatus(
+                                "JSON loaded into draft only. Review, then Apply to publish."
+                              );
+                              setError(null);
+                            } catch (err) {
+                              setError(
+                                err instanceof Error ? err.message : "Invalid JSON"
+                              );
+                            }
+                          }}
+                        >
+                          Load into draft only
+                        </button>
+                      </div>
                     </div>
                     <div className={sectionCard}>
                       <h3 className="font-semibold text-white">Reset</h3>
                       <p className="text-sm text-secondary">
-                        Restore the original demo portfolio content and clear saved browser data.
+                        Restore the original demo portfolio content. A version snapshot is kept so
+                        you can restore your previous applied config from History.
                       </p>
                       <button
                         type="button"
@@ -1542,12 +2021,17 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         onClick={() => {
                           if (
                             window.confirm(
-                              "Reset portfolio to defaults? This clears your saved configuration."
+                              "Reset portfolio to defaults? Your previous applied config stays in History."
                             )
                           ) {
                             resetToDefaults();
-                            setDraft(deepClone(defaultPortfolioData));
-                            setStatus("Portfolio reset to original demo content.");
+                            resetDraft(clonePortfolio(defaultPortfolioData), {
+                              baseFingerprint: portfolioFingerprint(defaultPortfolioData),
+                            });
+                            refreshVersions();
+                            setStatus(
+                              "Portfolio reset to original demo content (saved in version history)."
+                            );
                             setError(null);
                           }
                         }}
@@ -1562,11 +2046,31 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
             <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
               <p className="text-xs text-secondary">
-                Draft edits are local until you click Apply. Live site uses the applied config.
+                {isDirty
+                  ? "You have unsaved draft changes (auto-saved in this browser until Apply)."
+                  : "Draft matches the live portfolio."}{" "}
+                <span className="text-white/50">Ctrl+Z / Ctrl+Y for undo/redo.</span>
               </p>
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={btnGhost}
+                  disabled={!isDirty}
+                  onClick={discardDraftToLive}
+                >
+                  Discard draft
+                </button>
                 <button type="button" className={btnGhost} onClick={onClose}>
-                  Cancel
+                  {isDirty ? "Close (keep draft)" : "Close"}
+                </button>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  onClick={() => {
+                    applyDraft();
+                  }}
+                >
+                  Apply to portfolio
                 </button>
                 <button
                   type="button"
@@ -1576,7 +2080,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     onClose();
                   }}
                 >
-                  Apply to portfolio
+                  Apply & close
                 </button>
               </div>
             </footer>
