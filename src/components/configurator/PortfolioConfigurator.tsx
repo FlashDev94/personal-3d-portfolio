@@ -33,6 +33,7 @@ import { useDraftHistory } from "../../hooks/useDraftHistory";
 import {
   clonePortfolio,
   loadPersistedDraft,
+  parsePortfolioJson,
   portfolioFingerprint,
   type DraftCommitOptions,
 } from "../../utils/history";
@@ -161,11 +162,16 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const applyDraft = () => {
     flushHistory();
-    commitPortfolio(clonePortfolio(draft), "Applied from configurator");
-    markClean(portfolioFingerprint(draft));
+    const snapshot = clonePortfolio(draft);
+    const persisted = commitPortfolio(snapshot, "Applied from configurator");
+    markClean(portfolioFingerprint(snapshot));
     clearDraftPersistence();
     refreshVersions();
-    setStatus("Portfolio updated, saved, and added to version history.");
+    setStatus(
+      persisted
+        ? "Portfolio updated, saved, and added to version history."
+        : "Portfolio updated and saved. Version history could not be stored (browser storage full)."
+    );
     setError(null);
   };
 
@@ -322,7 +328,9 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo, undoLabel, redoLabel]);
 
-  // Soft notice when another tab commits — never clobber a dirty draft
+  // Soft notice when another tab commits — never clobber a dirty draft.
+  // Keep remoteUpdate until user reloads or dismisses so the banner cannot
+  // disappear after undo-to-clean without reconciling baseFingerprint.
   const remoteRev = remoteUpdate?.rev ?? null;
   useEffect(() => {
     if (!remoteUpdate || remoteRev == null) return;
@@ -332,6 +340,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       );
       return;
     }
+    // Clean draft: auto-adopt live portfolio from the other tab
     resetDraft(
       { ...data, theme3d: clampTheme3d(data.theme3d) },
       { baseFingerprint: remoteUpdate.fingerprint || liveFingerprint }
@@ -340,9 +349,8 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setStatus(
       `Synced live portfolio from another tab (${remoteUpdate.label || "update"}).`
     );
-    // Only react to new remote revisions — not every draft keystroke / liveFingerprint tick
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: remoteRev is the gate
-  }, [remoteRev]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remoteRev gates new events; isDirty re-check on clean-up path
+  }, [remoteRev, isDirty]);
 
   return (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
@@ -359,7 +367,11 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <h2 className="text-lg font-bold text-white">Portfolio Configurator</h2>
                 <p className="text-xs text-secondary">
                   Draft edits are undoable. Apply saves to this browser, version history, and other open tabs.
-                  {isDirty ? (
+                  {remoteUpdate ? (
+                    <span className="ml-1 font-semibold text-amber-300">
+                      Live site updated in another tab
+                    </span>
+                  ) : isDirty ? (
                     <span className="ml-1 font-semibold text-amber-300">Unsaved draft</span>
                   ) : (
                     <span className="ml-1 text-emerald-300/90">In sync with live site</span>
@@ -406,11 +418,14 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             </header>
 
-            {remoteUpdate && isDirty && (
+            {remoteUpdate && (
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-100">
                 <span>
                   Live portfolio changed in another tab
-                  {remoteUpdate.label ? ` (${remoteUpdate.label})` : ""}. Draft kept.
+                  {remoteUpdate.label ? ` (${remoteUpdate.label})` : ""}.
+                  {isDirty
+                    ? " Your draft is preserved until you reload or keep editing."
+                    : " Draft will sync automatically, or reload now."}
                 </span>
                 <div className="flex gap-2">
                   <button type="button" className={btnGhost} onClick={discardDraftToLive}>
@@ -421,7 +436,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     className={btnGhost}
                     onClick={() => acknowledgeRemoteUpdate()}
                   >
-                    Keep draft
+                    Dismiss
                   </button>
                 </div>
               </div>
@@ -722,16 +737,22 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           type="button"
                           className={btnGhost}
                           onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              services: [
-                                ...prev.services,
-                                {
-                                  title: "New Service",
-                                  icon: resolveServiceIcon("Web Developer", prev.services.length),
-                                },
-                              ],
-                            }))
+                            commit(
+                              (prev) => ({
+                                ...prev,
+                                services: [
+                                  ...prev.services,
+                                  {
+                                    title: "New Service",
+                                    icon: resolveServiceIcon(
+                                      "Web Developer",
+                                      prev.services.length
+                                    ),
+                                  },
+                                ],
+                              }),
+                              "Add service"
+                            )
                           }
                         >
                           + Add
@@ -1954,13 +1975,16 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           className={btnPrimary}
                           onClick={() => {
                             try {
-                              importJson(jsonText, "Imported JSON");
-                              const parsed = JSON.parse(jsonText) as TPortfolioData;
+                              const normalized = parsePortfolioJson(jsonText);
+                              if (!normalized) {
+                                throw new Error("Invalid portfolio JSON");
+                              }
                               const next = {
-                                ...parsed,
-                                theme3d: clampTheme3d(parsed.theme3d),
+                                ...normalized,
+                                theme3d: clampTheme3d(normalized.theme3d),
                               };
-                              // Record as draft checkpoint too so Undo can return to pre-import draft
+                              importJson(jsonText, "Imported JSON");
+                              // Same normalized snapshot in draft so live/draft fingerprints match
                               commit(() => next, "Import JSON into draft");
                               markClean(portfolioFingerprint(next));
                               clearDraftPersistence();
@@ -1983,14 +2007,14 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           className={btnGhost}
                           onClick={() => {
                             try {
-                              const parsed = JSON.parse(jsonText) as TPortfolioData;
-                              if (!parsed?.config) {
+                              const normalized = parsePortfolioJson(jsonText);
+                              if (!normalized) {
                                 throw new Error("Invalid portfolio JSON");
                               }
                               commit(
                                 () => ({
-                                  ...parsed,
-                                  theme3d: clampTheme3d(parsed.theme3d),
+                                  ...normalized,
+                                  theme3d: clampTheme3d(normalized.theme3d),
                                 }),
                                 "Import JSON into draft only"
                               );

@@ -40,11 +40,36 @@ function readStore(): VersionStoreV1 {
   }
 }
 
+function stripHeavyDataUrls(data: TPortfolioData): TPortfolioData {
+  const next = clonePortfolio(data);
+  const scrub = (s: string) =>
+    s.startsWith("data:image/") && s.length > 2_000
+      ? `data:image/svg+xml,${encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
+        )}`
+      : s;
+
+  next.technologies = next.technologies.map((t) => ({
+    ...t,
+    icon: scrub(t.icon),
+  }));
+  next.services = next.services.map((s) => ({ ...s, icon: scrub(s.icon) }));
+  next.experiences = next.experiences.map((e) => ({
+    ...e,
+    icon: scrub(e.icon),
+  }));
+  next.projects = next.projects.map((p) => ({ ...p, image: scrub(p.image) }));
+  next.testimonials = next.testimonials.map((t) => ({
+    ...t,
+    image: scrub(t.image),
+  }));
+  return next;
+}
+
 function writeStore(store: VersionStoreV1): boolean {
   try {
     let entries = store.entries.slice(-HISTORY_LIMITS.maxVersions);
-    // Prune until it fits (custom icons can blow quota)
-    for (let attempt = 0; attempt < 8; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       try {
         localStorage.setItem(
           VERSIONS_STORAGE_KEY,
@@ -52,16 +77,33 @@ function writeStore(store: VersionStoreV1): boolean {
         );
         return true;
       } catch {
-        if (entries.length <= 1) {
-          // Last resort: drop largest data URLs from oldest entry
-          if (entries.length === 1) {
+        if (entries.length > 1) {
+          entries = entries.slice(1);
+          continue;
+        }
+        // Last entry still too large — strip heavy data URLs
+        if (entries.length === 1) {
+          entries = [
+            {
+              ...entries[0],
+              data: stripHeavyDataUrls(entries[0].data),
+              label: `${entries[0].label} (icons trimmed)`,
+            },
+          ];
+          try {
+            localStorage.setItem(
+              VERSIONS_STORAGE_KEY,
+              JSON.stringify({ v: 1, entries })
+            );
+            return true;
+          } catch {
             console.warn(
               "Version history storage full; could not persist snapshot."
             );
+            return false;
           }
-          return false;
         }
-        entries = entries.slice(1);
+        return false;
       }
     }
     return false;
@@ -74,30 +116,32 @@ export function loadVersionHistory(): VersionEntry[] {
   return readStore().entries;
 }
 
+export type AppendVersionResult = {
+  entry: VersionEntry;
+  persisted: boolean;
+};
+
 export function appendVersion(
   data: TPortfolioData,
   label: string
-): VersionEntry | null {
+): AppendVersionResult {
+  let payload = clonePortfolio(data);
+  const jsonLen = JSON.stringify(payload).length;
+  if (jsonLen > HISTORY_LIMITS.maxSnapshotChars) {
+    payload = stripHeavyDataUrls(payload);
+  }
+
   const entry: VersionEntry = {
     id: newId(),
     at: Date.now(),
     label: label.trim() || "Snapshot",
-    data: clonePortfolio(data),
+    data: payload,
   };
 
-  const jsonLen = JSON.stringify(entry.data).length;
-  if (jsonLen > HISTORY_LIMITS.maxSnapshotChars) {
-    console.warn(
-      "Snapshot unusually large; still attempting to store version history.",
-      jsonLen
-    );
-  }
-
   const store = readStore();
-  // Skip exact consecutive duplicate labels+fingerprint-ish by id of last
   store.entries = [...store.entries, entry].slice(-HISTORY_LIMITS.maxVersions);
-  const ok = writeStore(store);
-  return ok ? entry : entry; // still return entry for in-memory UI even if disk fails
+  const persisted = writeStore(store);
+  return { entry, persisted };
 }
 
 export function deleteVersion(id: string): VersionEntry[] {
@@ -126,6 +170,6 @@ export function ensureSeedVersion(
 ): VersionEntry[] {
   const store = readStore();
   if (store.entries.length > 0) return store.entries;
-  const entry = appendVersion(data, label);
-  return entry ? loadVersionHistory() : [];
+  appendVersion(data, label);
+  return loadVersionHistory();
 }

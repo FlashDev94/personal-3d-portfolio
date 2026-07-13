@@ -22,6 +22,7 @@ import {
   portfolioFingerprint,
   deleteVersion as removeVersionEntry,
   subscribePortfolioSync,
+  VERSIONS_STORAGE_KEY,
   type VersionEntry,
 } from "../utils/history";
 
@@ -46,7 +47,7 @@ type ContentContextValue = {
    * Replace live portfolio, append a version-history snapshot, and notify other tabs.
    * Use for Apply / Import / Reset / Restore version.
    */
-  commitPortfolio: (next: TPortfolioData, label: string) => void;
+  commitPortfolio: (next: TPortfolioData, label: string) => boolean;
   resetToDefaults: () => void;
   exportJson: () => string;
   importJson: (json: string, label?: string) => void;
@@ -104,9 +105,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
   contentRef.current = content;
   themeRef.current = theme3d;
 
-  /** Suppress echoing our own localStorage writes as remote updates. */
-  const persistEpochRef = useRef(0);
   const applyingRemoteRef = useRef(false);
+  /** Synchronous live fingerprint for multi-tab dedupe (updated in applyLocal). */
+  const liveFpRef = useRef(liveFingerprint);
 
   const fullData = useCallback(
     (): TPortfolioData => ({
@@ -122,9 +123,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const applyLocal = useCallback((next: TPortfolioData) => {
     const split = splitPortfolio(next);
+    const fp = portfolioFingerprint(next);
+    liveFpRef.current = fp;
     setContent(split.content);
     setTheme3d(split.theme3d);
-    setLiveFingerprint(portfolioFingerprint(next));
+    setLiveFingerprint(fp);
   }, []);
 
   useEffect(() => {
@@ -147,8 +150,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         const payload = { ...content, theme3d };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-        persistEpochRef.current = Date.now();
-        setLiveFingerprint(portfolioFingerprint(payload));
+        const fp = portfolioFingerprint(payload);
+        liveFpRef.current = fp;
+        setLiveFingerprint(fp);
       } catch (err) {
         console.warn("Failed to persist portfolio config", err);
       }
@@ -174,7 +178,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       const stored = parsePortfolioJson(localStorage.getItem(STORAGE_KEY));
       if (!stored) return;
       const fp = portfolioFingerprint(stored);
-      if (fp === portfolioFingerprint(fullData())) return;
+      if (fp === liveFpRef.current) return;
 
       applyingRemoteRef.current = true;
       applyLocal(stored);
@@ -185,7 +189,6 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
         label,
         fingerprint: fp,
       });
-      // Release guard after React applies state + skip one persist cycle
       window.setTimeout(() => {
         applyingRemoteRef.current = false;
       }, 250);
@@ -206,7 +209,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
         // Ignore events that fire in the same document for our writes in some browsers
         ingestRemote("Updated in another tab");
       }
-      if (ev.key === "portfolio-versions-v1") {
+      if (ev.key === VERSIONS_STORAGE_KEY) {
         setVersions(loadVersionHistory());
       }
     };
@@ -216,7 +219,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       unsub();
       window.removeEventListener("storage", onStorage);
     };
-  }, [isHydrated, applyLocal, fullData]);
+  }, [isHydrated, applyLocal]);
 
   const updateTheme = useCallback((partial: Partial<TTheme3d>) => {
     setTheme3d((prev) => clampTheme3d({ ...prev, ...partial }));
@@ -265,25 +268,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     (next: TPortfolioData, label: string) => {
       const normalized = parsePortfolioJson(JSON.stringify(next)) ?? next;
       applyLocal(normalized);
-      appendVersion(normalized, label);
+      const { persisted } = appendVersion(normalized, label);
+      if (!persisted) {
+        console.warn(
+          "Portfolio applied, but version history could not be persisted (storage full)."
+        );
+      }
       setVersions(loadVersionHistory());
-      const fp = portfolioFingerprint(normalized);
-      setLiveFingerprint(fp);
       setRemoteUpdate(null);
-      // Persist immediately so other tabs' storage events see fresh data
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-        persistEpochRef.current = Date.now();
       } catch (err) {
         console.warn("Failed to persist committed portfolio", err);
       }
       broadcastPortfolioSync({
         type: "applied",
         rev: Date.now(),
-        fingerprint: fp,
+        fingerprint: liveFpRef.current,
         label,
       });
       broadcastPortfolioSync({ type: "versions", rev: Date.now() });
+      return persisted;
     },
     [applyLocal]
   );
@@ -300,11 +305,6 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const resetToDefaults = useCallback(() => {
     commitPortfolio(defaultPortfolioData, "Reset to defaults");
-    try {
-      // commitPortfolio already wrote STORAGE_KEY; keep versions
-    } catch {
-      /* ignore */
-    }
   }, [commitPortfolio]);
 
   const exportJson = useCallback(
