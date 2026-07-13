@@ -78,6 +78,29 @@ function testFingerprintDetectsEdit() {
   assert.notEqual(portfolioFingerprint(a), portfolioFingerprint(b));
 }
 
+function testFingerprintDetectsAboutEyebrow() {
+  const a = sample();
+  const b = sample();
+  b.config.sections.about.p = "Introduction";
+  assert.notEqual(portfolioFingerprint(a), portfolioFingerprint(b));
+}
+
+function testFingerprintDetectsAboutHeading() {
+  const a = sample();
+  const b = sample();
+  b.config.sections.about.h2 = "About me.";
+  assert.notEqual(portfolioFingerprint(a), portfolioFingerprint(b));
+}
+
+function testFingerprintDetectsSameLengthPointRewrite() {
+  const a = sample();
+  const b = sample();
+  // same length as "Shipped things."
+  b.experiences[0].points = ["Shipped widget!"];
+  assert.equal(a.experiences[0].points[0].length, b.experiences[0].points[0].length);
+  assert.notEqual(portfolioFingerprint(a), portfolioFingerprint(b));
+}
+
 function testFingerprintDetectsIconUpload() {
   const a = sample();
   const b = sample();
@@ -103,6 +126,9 @@ function testCloneIsolation() {
 
 testFingerprintStable();
 testFingerprintDetectsEdit();
+testFingerprintDetectsAboutEyebrow();
+testFingerprintDetectsAboutHeading();
+testFingerprintDetectsSameLengthPointRewrite();
 testFingerprintDetectsIconUpload();
 testFingerprintDetectsTheme();
 testCloneIsolation();
