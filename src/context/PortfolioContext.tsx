@@ -21,10 +21,26 @@ import {
   parsePortfolioJson,
   portfolioFingerprint,
   deleteVersion as removeVersionEntry,
+  setVersionHistoryProfileId,
   subscribePortfolioSync,
-  VERSIONS_STORAGE_KEY,
   type VersionEntry,
 } from "../utils/history";
+import {
+  createProfile as createProfileInStore,
+  deleteProfile as deleteProfileInStore,
+  ensureProfileRegistry,
+  getProfileBySlug,
+  loadProfileData,
+  type PortfolioProfile,
+  type ProfileId,
+  profileConfigKey,
+  profileVersionsKey,
+  renameProfile as renameProfileInStore,
+  saveProfileData,
+  setActiveProfileId,
+  touchProfile,
+  writeRegistry,
+} from "../utils/profiles";
 
 /** Portfolio payload without the live theme (theme has its own context). */
 export type TPortfolioContent = Omit<TPortfolioData, "theme3d">;
@@ -34,34 +50,43 @@ export type RemoteUpdateNotice = {
   at: number;
   label?: string;
   fingerprint: string;
+  profileId?: string;
 };
 
 type ContentContextValue = {
   content: TPortfolioContent;
-  /** Full snapshot including current theme — identity changes only when content changes. */
   data: TPortfolioData;
   setData: React.Dispatch<React.SetStateAction<TPortfolioData>>;
   updateData: (partial: Partial<TPortfolioData>) => void;
   replaceData: (next: TPortfolioData) => void;
-  /**
-   * Replace live portfolio, append a version-history snapshot, and notify other tabs.
-   * Use for Apply / Import / Reset / Restore version.
-   */
   commitPortfolio: (next: TPortfolioData, label: string) => boolean;
   resetToDefaults: () => void;
   exportJson: () => string;
   importJson: (json: string, label?: string) => void;
   isHydrated: boolean;
-  /** Fingerprint of the currently applied live portfolio. */
   liveFingerprint: string;
-  /** Another tab committed a newer applied config. */
   remoteUpdate: RemoteUpdateNotice | null;
   acknowledgeRemoteUpdate: () => void;
-  /** Applied version history (newest last). */
   versions: VersionEntry[];
   refreshVersions: () => void;
   restoreVersion: (id: string) => boolean;
   deleteVersion: (id: string) => void;
+  /** Multi-profile */
+  profiles: PortfolioProfile[];
+  activeProfileId: ProfileId;
+  activeProfile: PortfolioProfile | null;
+  /** True when URL is in shareable preview mode (no accidental admin side-effects). */
+  isPreviewMode: boolean;
+  switchProfile: (profileId: ProfileId, opts?: { preview?: boolean }) => void;
+  createProfile: (
+    label: string,
+    opts?: { cloneFromActive?: boolean }
+  ) => PortfolioProfile | null;
+  renameProfile: (profileId: ProfileId, label: string) => void;
+  deleteProfile: (profileId: ProfileId) => boolean;
+  /** Shareable link for the given profile slug (current origin). */
+  getShareUrl: (slug: string, preview?: boolean) => string;
+  refreshProfiles: () => void;
 };
 
 type ThemeContextValue = {
@@ -83,6 +108,33 @@ function splitPortfolio(full: TPortfolioData): {
   };
 }
 
+function readUrlProfile(): { slug: string | null; preview: boolean } {
+  if (typeof window === "undefined") return { slug: null, preview: false };
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      slug: params.get("profile") || params.get("p"),
+      preview:
+        params.get("preview") === "1" || params.get("preview") === "true",
+    };
+  } catch {
+    return { slug: null, preview: false };
+  }
+}
+
+function writeUrlProfile(slug: string, preview: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("profile", slug);
+    if (preview) url.searchParams.set("preview", "1");
+    else url.searchParams.delete("preview");
+    window.history.replaceState({}, "", url.toString());
+  } catch {
+    /* ignore */
+  }
+}
+
 const initial = splitPortfolio(defaultPortfolioData);
 
 export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -98,16 +150,21 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     null
   );
   const [versions, setVersions] = useState<VersionEntry[]>([]);
+  const [profiles, setProfiles] = useState<PortfolioProfile[]>([]);
+  const [activeProfileId, setActiveProfileIdState] = useState<ProfileId>("");
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
-  // Always-current refs for export / persistence without widening memo deps
   const contentRef = useRef(content);
   const themeRef = useRef(theme3d);
   contentRef.current = content;
   themeRef.current = theme3d;
 
   const applyingRemoteRef = useRef(false);
-  /** Synchronous live fingerprint for multi-tab dedupe (updated in applyLocal). */
   const liveFpRef = useRef(liveFingerprint);
+  const activeProfileIdRef = useRef(activeProfileId);
+  activeProfileIdRef.current = activeProfileId;
+  const isPreviewModeRef = useRef(isPreviewMode);
+  isPreviewModeRef.current = isPreviewMode;
 
   const fullData = useCallback(
     (): TPortfolioData => ({
@@ -121,6 +178,12 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     setVersions(loadVersionHistory());
   }, []);
 
+  const refreshProfiles = useCallback(() => {
+    const reg = ensureProfileRegistry();
+    setProfiles(reg.profiles);
+    setActiveProfileIdState(reg.activeId);
+  }, []);
+
   const applyLocal = useCallback((next: TPortfolioData) => {
     const split = splitPortfolio(next);
     const fp = portfolioFingerprint(next);
@@ -130,35 +193,62 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     setLiveFingerprint(fp);
   }, []);
 
-  useEffect(() => {
-    const stored = parsePortfolioJson(localStorage.getItem(STORAGE_KEY));
-    if (stored) {
-      applyLocal(stored);
-      ensureSeedVersion(stored, "Restored from browser");
-    } else {
-      ensureSeedVersion(defaultPortfolioData, "Initial defaults");
-    }
-    setVersions(loadVersionHistory());
-    setIsHydrated(true);
-  }, [applyLocal]);
+  const loadProfileIntoState = useCallback(
+    (profileId: ProfileId, label?: string) => {
+      setVersionHistoryProfileId(profileId);
+      const data =
+        loadProfileData(profileId) ?? cloneDefault();
+      applyLocal(data);
+      ensureSeedVersion(data, label || "Profile loaded");
+      setVersions(loadVersionHistory());
+    },
+    [applyLocal]
+  );
 
-  // Debounced persist — theme thrashing should not rewrite localStorage every click
   useEffect(() => {
-    if (!isHydrated) return;
-    if (applyingRemoteRef.current) return;
-    const handle = window.setTimeout(() => {
-      try {
-        const payload = { ...content, theme3d };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-        const fp = portfolioFingerprint(payload);
-        liveFpRef.current = fp;
-        setLiveFingerprint(fp);
-      } catch (err) {
-        console.warn("Failed to persist portfolio config", err);
+    const reg = ensureProfileRegistry();
+    setProfiles(reg.profiles);
+
+    const { slug, preview } = readUrlProfile();
+    let profileId = reg.activeId;
+    if (slug) {
+      const bySlug = getProfileBySlug(reg, slug);
+      if (bySlug) {
+        profileId = bySlug.id;
+        if (!preview) {
+          setActiveProfileId(profileId);
+        }
       }
+    }
+
+    setActiveProfileIdState(profileId);
+    setIsPreviewMode(preview && !!slug);
+    setVersionHistoryProfileId(profileId);
+    loadProfileIntoState(profileId, "Restored profile");
+    const active = reg.profiles.find((p) => p.id === profileId);
+    if (active) writeUrlProfile(active.slug, preview && !!slug);
+    setIsHydrated(true);
+  }, [loadProfileIntoState]);
+
+  // Debounced persist of *active* profile (skip pure preview browsing)
+  useEffect(() => {
+    if (!isHydrated || !activeProfileId) return;
+    if (applyingRemoteRef.current) return;
+    if (isPreviewMode) return;
+    const handle = window.setTimeout(() => {
+      const payload = { ...content, theme3d };
+      const ok = saveProfileData(activeProfileId, payload);
+      if (!ok) {
+        console.warn("Failed to persist profile config");
+        return;
+      }
+      touchProfile(activeProfileId);
+      const fp = portfolioFingerprint(payload);
+      liveFpRef.current = fp;
+      setLiveFingerprint(fp);
     }, 200);
     return () => window.clearTimeout(handle);
-  }, [content, theme3d, isHydrated]);
+  }, [content, theme3d, isHydrated, activeProfileId, isPreviewMode]);
 
   useEffect(() => {
     if (content.config.html.title) {
@@ -170,28 +260,37 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     applyPaletteToDocument(theme3d);
   }, [theme3d]);
 
-  // Multi-tab: BroadcastChannel + storage event (Safari / older browsers)
+  // Multi-tab sync (profile-aware)
   useEffect(() => {
     if (!isHydrated) return;
 
     let remoteGateTimer: number | null = null;
 
-    const ingestRemote = (label?: string) => {
-      const stored = parsePortfolioJson(localStorage.getItem(STORAGE_KEY));
+    const ingestRemoteForProfile = (
+      profileId: string | undefined,
+      label?: string
+    ) => {
+      const pid = profileId || activeProfileIdRef.current;
+      if (!pid || pid !== activeProfileIdRef.current) {
+        // Another profile changed — refresh registry only; do not clobber this tab's view
+        refreshProfiles();
+        return;
+      }
+      const stored = loadProfileData(pid);
       if (!stored) return;
       const fp = portfolioFingerprint(stored);
-      // Dedupe: same live fingerprint means we already applied this snapshot
-      // (BroadcastChannel + storage event often fire for one Apply).
       if (fp === liveFpRef.current) return;
 
       applyingRemoteRef.current = true;
       applyLocal(stored);
+      setVersionHistoryProfileId(pid);
       setVersions(loadVersionHistory());
       setRemoteUpdate({
         rev: Date.now(),
         at: Date.now(),
         label,
         fingerprint: fp,
+        profileId: pid,
       });
       if (remoteGateTimer != null) window.clearTimeout(remoteGateTimer);
       remoteGateTimer = window.setTimeout(() => {
@@ -203,37 +302,151 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     const unsub = subscribePortfolioSync((msg) => {
       if (!isForeignTab(msg)) return;
       if (msg.type === "applied") {
-        ingestRemote(msg.label);
+        ingestRemoteForProfile(msg.profileId, msg.label);
       } else if (msg.type === "versions") {
-        setVersions(loadVersionHistory());
+        if (!msg.profileId || msg.profileId === activeProfileIdRef.current) {
+          setVersions(loadVersionHistory());
+        }
+      } else if (msg.type === "profile-switch") {
+        // Peer switched — update registry list; optional soft notice only
+        refreshProfiles();
+      } else if (msg.type === "profiles") {
+        refreshProfiles();
       }
     });
 
     const onStorage = (ev: StorageEvent) => {
       if (ev.storageArea !== localStorage) return;
-      if (ev.key === STORAGE_KEY && ev.newValue) {
-        // Ignore events that fire in the same document for our writes in some browsers
-        ingestRemote("Updated in another tab");
+      const pid = activeProfileIdRef.current;
+      if (ev.key === profileConfigKey(pid) && ev.newValue) {
+        ingestRemoteForProfile(pid, "Updated in another tab");
       }
-      if (ev.key === VERSIONS_STORAGE_KEY) {
+      if (ev.key === STORAGE_KEY && ev.newValue) {
+        // Legacy mirror of active profile
+        ingestRemoteForProfile(pid, "Updated in another tab");
+      }
+      if (ev.key === profileVersionsKey(pid)) {
         setVersions(loadVersionHistory());
+      }
+      if (ev.key === "portfolio-profiles-v1") {
+        refreshProfiles();
       }
     };
     window.addEventListener("storage", onStorage);
 
+    const onPopState = () => {
+      const { slug, preview } = readUrlProfile();
+      if (!slug) return;
+      const reg = ensureProfileRegistry();
+      const bySlug = getProfileBySlug(reg, slug);
+      if (!bySlug) return;
+      if (bySlug.id === activeProfileIdRef.current && preview === isPreviewModeRef.current) {
+        return;
+      }
+      // Navigate via URL (back/forward)
+      setIsPreviewMode(preview);
+      if (!preview) setActiveProfileId(bySlug.id);
+      setActiveProfileIdState(bySlug.id);
+      loadProfileIntoState(bySlug.id, `URL profile: ${bySlug.label}`);
+      setRemoteUpdate(null);
+    };
+    window.addEventListener("popstate", onPopState);
+
     return () => {
       unsub();
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener("popstate", onPopState);
       if (remoteGateTimer != null) window.clearTimeout(remoteGateTimer);
       applyingRemoteRef.current = false;
     };
-  }, [isHydrated, applyLocal]);
+  }, [isHydrated, applyLocal, loadProfileIntoState, refreshProfiles]);
+
+  const switchProfile = useCallback(
+    (profileId: ProfileId, opts?: { preview?: boolean }) => {
+      const reg = ensureProfileRegistry();
+      const profile = reg.profiles.find((p) => p.id === profileId);
+      if (!profile) return;
+
+      const preview = opts?.preview === true;
+      // Live data for the outgoing profile is already debounced-persisted.
+      // Drafts live in per-profile keys and are NOT touched here.
+
+      if (!preview) {
+        setActiveProfileId(profileId);
+      }
+      setActiveProfileIdState(profileId);
+      setIsPreviewMode(preview);
+      loadProfileIntoState(profileId, `Switched to ${profile.label}`);
+      setRemoteUpdate(null);
+      writeUrlProfile(profile.slug, preview);
+      setProfiles(ensureProfileRegistry().profiles);
+
+      broadcastPortfolioSync({
+        type: "profile-switch",
+        rev: Date.now(),
+        profileId,
+      });
+    },
+    [loadProfileIntoState]
+  );
+
+  const createProfile = useCallback(
+    (label: string, opts?: { cloneFromActive?: boolean }) => {
+      if (isPreviewModeRef.current) return null;
+      const { profile, registry } = createProfileInStore(label, {
+        cloneFromId: opts?.cloneFromActive
+          ? activeProfileIdRef.current
+          : undefined,
+      });
+      setProfiles(registry.profiles);
+      broadcastPortfolioSync({ type: "profiles", rev: Date.now() });
+      switchProfile(profile.id);
+      return profile;
+    },
+    [switchProfile]
+  );
+
+  const renameProfile = useCallback((profileId: ProfileId, label: string) => {
+    const reg = renameProfileInStore(profileId, label);
+    setProfiles(reg.profiles);
+    const p = reg.profiles.find((x) => x.id === profileId);
+    if (p && profileId === activeProfileIdRef.current) {
+      writeUrlProfile(p.slug, isPreviewModeRef.current);
+    }
+    broadcastPortfolioSync({ type: "profiles", rev: Date.now() });
+  }, []);
+
+  const deleteProfile = useCallback(
+    (profileId: ProfileId) => {
+      const reg = ensureProfileRegistry();
+      if (reg.profiles.length <= 1) return false;
+      const next = deleteProfileInStore(profileId);
+      setProfiles(next.profiles);
+      broadcastPortfolioSync({ type: "profiles", rev: Date.now() });
+      if (profileId === activeProfileIdRef.current) {
+        switchProfile(next.activeId);
+      }
+      return true;
+    },
+    [switchProfile]
+  );
+
+  const getShareUrl = useCallback((slug: string, preview = true) => {
+    if (typeof window === "undefined") return `?profile=${slug}&preview=1`;
+    const url = new URL(window.location.href);
+    url.searchParams.set("profile", slug);
+    if (preview) url.searchParams.set("preview", "1");
+    else url.searchParams.delete("preview");
+    return url.toString();
+  }, []);
 
   const updateTheme = useCallback((partial: Partial<TTheme3d>) => {
+    if (isPreviewModeRef.current) return;
     setTheme3d((prev) => clampTheme3d({ ...prev, ...partial }));
   }, []);
 
   const updateData = useCallback((partial: Partial<TPortfolioData>) => {
+    if (isPreviewModeRef.current) return;
     if (partial.theme3d) {
       setTheme3d((prev) => clampTheme3d({ ...prev, ...partial.theme3d }));
     }
@@ -268,6 +481,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const replaceData = useCallback(
     (next: TPortfolioData) => {
+      if (isPreviewModeRef.current) return;
       applyLocal(next);
     },
     [applyLocal]
@@ -275,8 +489,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const commitPortfolio = useCallback(
     (next: TPortfolioData, label: string) => {
+      if (isPreviewModeRef.current) return false;
+      const pid = activeProfileIdRef.current;
       const normalized = parsePortfolioJson(JSON.stringify(next)) ?? next;
       applyLocal(normalized);
+      setVersionHistoryProfileId(pid);
       const { persisted } = appendVersion(normalized, label);
       if (!persisted) {
         console.warn(
@@ -285,18 +502,20 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       setVersions(loadVersionHistory());
       setRemoteUpdate(null);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-      } catch (err) {
-        console.warn("Failed to persist committed portfolio", err);
-      }
+      saveProfileData(pid, normalized);
+      touchProfile(pid);
       broadcastPortfolioSync({
         type: "applied",
         rev: Date.now(),
         fingerprint: liveFpRef.current,
         label,
+        profileId: pid,
       });
-      broadcastPortfolioSync({ type: "versions", rev: Date.now() });
+      broadcastPortfolioSync({
+        type: "versions",
+        rev: Date.now(),
+        profileId: pid,
+      });
       return persisted;
     },
     [applyLocal]
@@ -347,11 +566,18 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
   const deleteVersion = useCallback((id: string) => {
     const next = removeVersionEntry(id);
     setVersions(next);
-    broadcastPortfolioSync({ type: "versions", rev: Date.now() });
+    broadcastPortfolioSync({
+      type: "versions",
+      rev: Date.now(),
+      profileId: activeProfileIdRef.current,
+    });
   }, []);
 
-  // Content-facing `data` includes latest theme snapshot but only changes identity
-  // when *content* changes — keeps theme toggles from re-rendering content consumers.
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) ?? null,
+    [profiles, activeProfileId]
+  );
+
   const dataForContent = useMemo<TPortfolioData>(
     () => ({ ...content, theme3d: themeRef.current }),
     [content]
@@ -376,6 +602,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       refreshVersions,
       restoreVersion,
       deleteVersion,
+      profiles,
+      activeProfileId,
+      activeProfile,
+      isPreviewMode,
+      switchProfile,
+      createProfile,
+      renameProfile,
+      deleteProfile,
+      getShareUrl,
+      refreshProfiles,
     }),
     [
       content,
@@ -395,6 +631,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       refreshVersions,
       restoreVersion,
       deleteVersion,
+      profiles,
+      activeProfileId,
+      activeProfile,
+      isPreviewMode,
+      switchProfile,
+      createProfile,
+      renameProfile,
+      deleteProfile,
+      getShareUrl,
+      refreshProfiles,
     ]
   );
 
@@ -413,7 +659,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
-/** Content + mutators. Does NOT re-render on pure theme3d changes. */
+function cloneDefault(): TPortfolioData {
+  return JSON.parse(JSON.stringify(defaultPortfolioData)) as TPortfolioData;
+}
+
 export function usePortfolio() {
   const ctx = useContext(ContentContext);
   if (!ctx) {
@@ -422,7 +671,6 @@ export function usePortfolio() {
   return ctx;
 }
 
-/** Live 3D / palette theme. Re-renders only when theme3d changes. */
 export function useTheme3d() {
   const ctx = useContext(ThemeContext);
   if (!ctx) {
@@ -431,10 +679,6 @@ export function useTheme3d() {
   return ctx;
 }
 
-/**
- * Subscribe to both content and theme (e.g. navbar, configurator, shell).
- * Prefer usePortfolio / useTheme3d when only one slice is needed.
- */
 export function usePortfolioAll() {
   const portfolio = usePortfolio();
   const { theme3d, updateTheme } = useTheme3d();
@@ -445,5 +689,4 @@ export function usePortfolioAll() {
   return { ...portfolio, data, theme3d, updateTheme };
 }
 
-// Re-export for callers that previously relied on context-local parsing
-export { parsePortfolioJson, clearVersionHistory };
+export { parsePortfolioJson, clearVersionHistory, writeRegistry };

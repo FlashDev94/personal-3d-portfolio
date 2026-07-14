@@ -3,6 +3,15 @@ import { SYNC_CHANNEL_NAME, type SyncMessage } from "./types";
 
 type Listener = (msg: SyncMessage) => void;
 
+/** Omit distributes over SyncMessage union so each variant keeps its fields. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+export type SyncMessagePayload = DistributiveOmit<SyncMessage, "tabId"> & {
+  tabId?: string;
+};
+
 let channel: BroadcastChannel | null = null;
 const listeners = new Set<Listener>();
 
@@ -43,9 +52,7 @@ export function subscribePortfolioSync(listener: Listener): () => void {
   };
 }
 
-export function broadcastPortfolioSync(
-  message: Omit<SyncMessage, "tabId"> & { tabId?: string }
-): void {
+export function broadcastPortfolioSync(message: SyncMessagePayload): void {
   const tabId = message.tabId ?? getTabId();
   const full = { ...message, tabId } as SyncMessage;
   try {

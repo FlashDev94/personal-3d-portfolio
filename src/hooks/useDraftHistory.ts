@@ -64,7 +64,9 @@ function resolveAction(
  */
 export function useDraftHistory(
   initial: TPortfolioData,
-  liveFingerprint: string
+  liveFingerprint: string,
+  /** Scopes draft localStorage so profile switches never clobber another profile's draft. */
+  profileId?: string | null
 ): UseDraftHistoryResult {
   const [draft, setDraftState] = useState<TPortfolioData>(() =>
     clonePortfolio(initial)
@@ -109,15 +111,15 @@ export function useDraftHistory(
       const fp = portfolioFingerprint(presentRef.current);
       if (fp === baseFpRef.current) {
         lastPersistedFpRef.current = null;
-        clearPersistedDraft();
+        clearPersistedDraft(profileId);
         return;
       }
       // Skip identical re-writes (rapid selective restore / theme thrash).
       if (lastPersistedFpRef.current === fp) return;
-      const ok = savePersistedDraft(presentRef.current, baseFpRef.current);
+      const ok = savePersistedDraft(presentRef.current, baseFpRef.current, profileId);
       if (ok) lastPersistedFpRef.current = fp;
     }, HISTORY_LIMITS.draftPersistMs);
-  }, []);
+  }, [profileId]);
 
   const pushPast = useCallback((entry: StackEntry) => {
     pastRef.current = [...pastRef.current, entry].slice(
@@ -264,25 +266,25 @@ export function useDraftHistory(
         options?.baseFingerprint != null
           ? options.baseFingerprint
           : portfolioFingerprint(cloned);
-      clearPersistedDraft();
+      clearPersistedDraft(profileId);
       syncFlags();
     },
-    [syncFlags]
+    [profileId, syncFlags]
   );
 
   const markClean = useCallback(
     (fingerprint?: string) => {
       baseFpRef.current =
         fingerprint ?? portfolioFingerprint(presentRef.current);
-      clearPersistedDraft();
+      clearPersistedDraft(profileId);
       syncFlags();
     },
-    [syncFlags]
+    [profileId, syncFlags]
   );
 
   const clearDraftPersistence = useCallback(() => {
-    clearPersistedDraft();
-  }, []);
+    clearPersistedDraft(profileId);
+  }, [profileId]);
 
   const flushHistory = useCallback(() => {
     flushDebouncedHistory();
@@ -299,10 +301,10 @@ export function useDraftHistory(
       }
       const fp = portfolioFingerprint(presentRef.current);
       if (fp !== baseFpRef.current) {
-        savePersistedDraft(presentRef.current, baseFpRef.current);
+        savePersistedDraft(presentRef.current, baseFpRef.current, profileId);
       }
     };
-  }, []);
+  }, [profileId]);
 
   return {
     draft,

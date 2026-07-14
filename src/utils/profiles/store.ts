@@ -1,11 +1,7 @@
 import type { TPortfolioData } from "../../types/portfolio";
 import { defaultPortfolioData, STORAGE_KEY } from "../../constants/defaults";
 import { clampTheme3d } from "../../constants/theme3d";
-import {
-  clonePortfolio,
-  normalizePortfolio,
-  parsePortfolioJson,
-} from "../history/clone";
+import { clonePortfolio, parsePortfolioJson } from "../history/clone";
 import {
   internPortfolioAssets,
   resolvePortfolioAssets,
@@ -30,7 +26,7 @@ function newId(): string {
 }
 
 function uniqueSlug(base: string, profiles: PortfolioProfile[], exceptId?: string): string {
-  let slug = slugifyLabel(base);
+  const slug = slugifyLabel(base);
   const taken = new Set(
     profiles.filter((p) => p.id !== exceptId).map((p) => p.slug)
   );

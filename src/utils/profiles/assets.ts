@@ -38,7 +38,7 @@ function writeStore(store: AssetStoreV1): boolean {
     console.warn("Asset store write failed (quota?)", err);
     // Drop oldest-ish keys until it fits (object key order is insertion order)
     const keys = Object.keys(store.blobs);
-    let blobs = { ...store.blobs };
+    const blobs = { ...store.blobs };
     while (keys.length > 0) {
       const drop = keys.shift()!;
       delete blobs[drop];

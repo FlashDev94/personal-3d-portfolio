@@ -106,6 +106,7 @@ export type TPortfolioData = {
 
 export type ConfiguratorTab =
   | "upload"
+  | "profiles"
   | "profile"
   | "about"
   | "experience"

@@ -38,9 +38,11 @@ import {
   type DraftCommitOptions,
 } from "../../utils/history";
 import { VersionComparePanel } from "./VersionComparePanel";
+import { ProfileSwitcher } from "../ProfileSwitcher";
 
 const TABS: { id: ConfiguratorTab; label: string }[] = [
   { id: "upload", label: "Resume Upload" },
+  { id: "profiles", label: "Profiles" },
   { id: "profile", label: "Profile" },
   { id: "about", label: "About" },
   { id: "experience", label: "Experience" },
@@ -74,7 +76,10 @@ function formatWhen(at: number): string {
   }
 }
 
-function buildInitialDraft(live: TPortfolioData): {
+function buildInitialDraft(
+  live: TPortfolioData,
+  profileId?: string | null
+): {
   draft: TPortfolioData;
   restored: boolean;
   baseFingerprint: string;
@@ -84,7 +89,8 @@ function buildInitialDraft(live: TPortfolioData): {
     theme3d: clampTheme3d(live.theme3d),
   };
   const liveFp = portfolioFingerprint(liveClamped);
-  const persisted = loadPersistedDraft();
+  // Load draft for *this* profile only — never another profile's unsaved work.
+  const persisted = loadPersistedDraft(profileId);
   if (
     persisted &&
     portfolioFingerprint(persisted.data) !== liveFp
@@ -119,12 +125,18 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     restoreVersion,
     deleteVersion,
     refreshVersions,
+    activeProfileId,
+    isPreviewMode,
   } = usePortfolioAll();
 
-  // Capture live portfolio only on first mount so later live/remote updates
-  // do not wipe an in-progress draft via this memo.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only seed
-  const initialBundle = useMemo(() => buildInitialDraft(data), []);
+  // Capture live portfolio only on first mount (panel is remounted per profile
+  // via key=activeProfileId) so later live/remote updates do not wipe an
+  // in-progress draft via this memo.
+  const initialBundle = useMemo(
+    () => buildInitialDraft(data, activeProfileId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only seed
+    []
+  );
   const {
     draft,
     setDraft,
@@ -139,7 +151,11 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     markClean,
     flushHistory,
     clearDraftPersistence,
-  } = useDraftHistory(initialBundle.draft, initialBundle.baseFingerprint);
+  } = useDraftHistory(
+    initialBundle.draft,
+    initialBundle.baseFingerprint,
+    activeProfileId
+  );
 
   const [tab, setTab] = useState<ConfiguratorTab>("upload");
   const [status, setStatus] = useState<string | null>(() =>
@@ -370,8 +386,13 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-white">Portfolio Configurator</h2>
                 <p className="text-xs text-secondary">
-                  Draft edits are undoable. Apply saves to this browser, version history, and other open tabs.
-                  {remoteUpdate ? (
+                  Draft edits are undoable and scoped to this profile. Apply saves to this
+                  browser, version history, and other open tabs.
+                  {isPreviewMode ? (
+                    <span className="ml-1 font-semibold text-amber-300">
+                      Preview mode — apply disabled
+                    </span>
+                  ) : remoteUpdate ? (
                     <span className="ml-1 font-semibold text-amber-300">
                       Live site updated in another tab
                     </span>
@@ -473,6 +494,14 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 {error && (
                   <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                     {error}
+                  </div>
+                )}
+
+                {tab === "profiles" && (
+                  <div className="space-y-4">
+                    <div className={sectionCard}>
+                      <ProfileSwitcher variant="panel" />
+                    </div>
                   </div>
                 )}
 
@@ -2108,6 +2137,12 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <button
                   type="button"
                   className={btnPrimary}
+                  disabled={isPreviewMode}
+                  title={
+                    isPreviewMode
+                      ? "Exit preview mode to apply changes"
+                      : "Apply draft to the active profile"
+                  }
                   onClick={() => {
                     applyDraft();
                   }}
@@ -2117,6 +2152,12 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <button
                   type="button"
                   className={btnPrimary}
+                  disabled={isPreviewMode}
+                  title={
+                    isPreviewMode
+                      ? "Exit preview mode to apply changes"
+                      : "Apply draft and close"
+                  }
                   onClick={() => {
                     applyDraft();
                     onClose();
@@ -2150,14 +2191,21 @@ const CustomizeFab: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
 
 /**
  * Mounts the heavy panel only when open so theme thrashing does not re-render
- * the entire configurator tree.
+ * the entire configurator tree. Remounts on profile switch so each profile
+ * loads its own draft/history without clobbering another profile's unsaved work.
  */
 const PortfolioConfigurator: React.FC = () => {
   const [open, setOpen] = useState(false);
+  const { activeProfileId } = usePortfolioAll();
   if (!open) {
     return <CustomizeFab onOpen={() => setOpen(true)} />;
   }
-  return <ConfiguratorPanel onClose={() => setOpen(false)} />;
+  return (
+    <ConfiguratorPanel
+      key={activeProfileId || "default"}
+      onClose={() => setOpen(false)}
+    />
+  );
 };
 
 export default PortfolioConfigurator;
