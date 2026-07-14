@@ -55,7 +55,7 @@ const BootScreenBridge = memo(function BootScreenBridge({
     <BootScreen
       ready={ready}
       accent={runtime.palette.accent}
-      minDurationMs={650}
+      minDurationMs={150}
       onFinished={onFinished}
     />
   );
@@ -101,9 +101,28 @@ const PortfolioShell = () => {
   // Absolute fail-safe: never leave the portfolio invisible if boot hangs
   useEffect(() => {
     if (bootDone) return;
-    const t = window.setTimeout(() => setBootDone(true), 10000);
+    const t = window.setTimeout(() => setBootDone(true), 6000);
     return () => window.clearTimeout(t);
   }, [bootDone]);
+
+  // Preload hero 3D as soon as the shell mounts (parallel with boot overlay)
+  useEffect(() => {
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      void import("./components/canvas/HeroScene");
+      // Warm default heavy pack only on wider viewports
+      if (window.matchMedia("(min-width: 501px)").matches) {
+        void import("./components/canvas/Computers");
+      }
+    };
+    // Start on first paint; do not wait for hydrate
+    const t = window.setTimeout(warm, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, []);
 
   return (
     <>
@@ -114,7 +133,7 @@ const PortfolioShell = () => {
 
       <BrowserRouter>
         <div
-          className={`bg-primary relative z-0 min-h-screen transition-opacity duration-500 ${
+          className={`bg-primary relative z-0 min-h-screen transition-opacity duration-200 ${
             bootDone ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden={!bootDone}

@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useTheme3d } from "../../context/PortfolioContext";
 import { useThemeRuntime } from "../../utils/themeRuntime";
-import ComputersCanvas from "./Computers";
-import AbstractCoreCanvas from "./AbstractCore";
-import NeonGridCanvas from "./NeonGrid";
 import ErrorBoundary from "../layout/ErrorBoundary";
+
+/** Only the active pack is downloaded — static imports of all three bloated boot. */
+const ComputersCanvas = lazy(() => import("./Computers"));
+const AbstractCoreCanvas = lazy(() => import("./AbstractCore"));
+const NeonGridCanvas = lazy(() => import("./NeonGrid"));
 
 /**
  * Routes the hero 3D pack from theme settings.
@@ -43,11 +45,13 @@ const HeroScene = () => {
         name="Hero PC"
         fallback={<div className="h-full w-full" aria-hidden />}
       >
-        <ComputersCanvas
-          {...common}
-          shadows={runtime.shadows}
-          forceMobile={false}
-        />
+        <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
+          <ComputersCanvas
+            {...common}
+            shadows={runtime.shadows}
+            forceMobile={false}
+          />
+        </Suspense>
       </ErrorBoundary>
     );
   }
@@ -60,11 +64,13 @@ const HeroScene = () => {
   if (theme3d.heroScene === "abstract_core") {
     return (
       <div className="absolute inset-0 h-full w-full">
-        <AbstractCoreCanvas
-          {...common}
-          accent={runtime.palette.accent}
-          scale={1.15}
-        />
+        <Suspense fallback={null}>
+          <AbstractCoreCanvas
+            {...common}
+            accent={runtime.palette.accent}
+            scale={1.15}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -72,7 +78,9 @@ const HeroScene = () => {
   if (theme3d.heroScene === "neon_grid") {
     return (
       <div className="absolute inset-0 h-full w-full">
-        <NeonGridCanvas {...common} accent={runtime.palette.accent} />
+        <Suspense fallback={null}>
+          <NeonGridCanvas {...common} accent={runtime.palette.accent} />
+        </Suspense>
       </div>
     );
   }

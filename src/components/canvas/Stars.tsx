@@ -44,7 +44,8 @@ const Stars = ({
 
   return (
     <group rotation={[0, 0, Math.PI / 4]}>
-      <Points ref={ref} positions={sphere} stride={3} frustumCulled>
+      {/* key=count forces a fresh buffer when quality changes (avoids THREE resize errors) */}
+      <Points key={count} ref={ref} positions={sphere} stride={3} frustumCulled>
         <PointMaterial
           transparent
           color={color}

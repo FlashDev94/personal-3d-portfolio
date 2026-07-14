@@ -127,6 +127,9 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     refreshVersions,
     activeProfileId,
     isPreviewMode,
+    storageHealth,
+    recoverBrowserStorage,
+    refreshStorageHealth,
   } = usePortfolioAll();
 
   // Capture live portfolio only on first mount (panel is remounted per profile
@@ -496,6 +499,65 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     {error}
                   </div>
                 )}
+
+                {storageHealth &&
+                  (storageHealth.level === "warn" ||
+                    storageHealth.level === "critical" ||
+                    storageHealth.level === "full" ||
+                    storageHealth.orphanAssetCount > 0) && (
+                    <div
+                      className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+                        storageHealth.level === "full" ||
+                        storageHealth.level === "critical"
+                          ? "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                          : "border-white/15 bg-white/5 text-secondary"
+                      }`}
+                    >
+                      <p className="font-medium text-white">
+                        Browser storage{" "}
+                        {storageHealth.level === "full"
+                          ? "is full"
+                          : storageHealth.level === "critical"
+                            ? "is nearly full"
+                            : "is filling up"}{" "}
+                        (~{Math.round(storageHealth.usageRatio * 100)}% used)
+                      </p>
+                      <p className="mt-1 text-xs">
+                        Profiles, drafts, history, and shared icons share this
+                        browser quota. Free space to avoid failed saves or
+                        inconsistent tabs.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          onClick={() => {
+                            const report = recoverBrowserStorage(true);
+                            refreshStorageHealth();
+                            setStatus(
+                              report.level === "ok" || report.level === "warn"
+                                ? `Storage recovered (${report.level}). Orphan assets: ${report.orphanAssetCount}.`
+                                : `Storage still ${report.level}. Remove unused profiles or history if saves fail.`
+                            );
+                          }}
+                        >
+                          Repair & free space
+                        </button>
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          onClick={() => {
+                            const r = refreshStorageHealth();
+                            setStatus(
+                              `Storage ${r.level}: ${Math.round(r.usedBytes / 1024)} KB used, ${r.assetBlobCount} shared assets, ${r.orphanAssetCount} orphans.`
+                            );
+                          }}
+                        >
+                          Recheck
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 {tab === "profiles" && (
                   <div className="space-y-4">

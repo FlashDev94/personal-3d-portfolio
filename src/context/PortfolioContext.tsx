@@ -41,6 +41,12 @@ import {
   touchProfile,
   writeRegistry,
 } from "../utils/profiles";
+import {
+  bootStorageMaintenance,
+  diagnoseStorage,
+  recoverStorage,
+  type StorageHealthReport,
+} from "../utils/storage";
 
 /** Portfolio payload without the live theme (theme has its own context). */
 export type TPortfolioContent = Omit<TPortfolioData, "theme3d">;
@@ -87,6 +93,11 @@ type ContentContextValue = {
   /** Shareable link for the given profile slug (current origin). */
   getShareUrl: (slug: string, preview?: boolean) => string;
   refreshProfiles: () => void;
+  /** localStorage health (quota, orphans, consistency). */
+  storageHealth: StorageHealthReport | null;
+  refreshStorageHealth: () => StorageHealthReport;
+  /** Reclaim space / repair orphans; returns updated health. */
+  recoverBrowserStorage: (aggressive?: boolean) => StorageHealthReport;
 };
 
 type ThemeContextValue = {
@@ -153,6 +164,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
   const [profiles, setProfiles] = useState<PortfolioProfile[]>([]);
   const [activeProfileId, setActiveProfileIdState] = useState<ProfileId>("");
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [storageHealth, setStorageHealth] =
+    useState<StorageHealthReport | null>(null);
 
   const contentRef = useRef(content);
   const themeRef = useRef(theme3d);
@@ -196,11 +209,19 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
   const loadProfileIntoState = useCallback(
     (profileId: ProfileId, label?: string) => {
       setVersionHistoryProfileId(profileId);
-      const data =
-        loadProfileData(profileId) ?? cloneDefault();
+      const data = loadProfileData(profileId) ?? cloneDefault();
       applyLocal(data);
-      ensureSeedVersion(data, label || "Profile loaded");
-      setVersions(loadVersionHistory());
+      // Defer version-history parse so profile switches paint content first
+      window.setTimeout(() => {
+        if (activeProfileIdRef.current !== profileId) return;
+        const existing = loadVersionHistory();
+        if (existing.length === 0) {
+          ensureSeedVersion(data, label || "Profile loaded");
+          setVersions(loadVersionHistory());
+        } else {
+          setVersions(existing);
+        }
+      }, 0);
     },
     [applyLocal]
   );
@@ -221,6 +242,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
 
+    // Hydrate first so the boot gate can open; run heavier storage GC idle.
     setActiveProfileIdState(profileId);
     setIsPreviewMode(preview && !!slug);
     setVersionHistoryProfileId(profileId);
@@ -228,7 +250,44 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     const active = reg.profiles.find((p) => p.id === profileId);
     if (active) writeUrlProfile(active.slug, preview && !!slug);
     setIsHydrated(true);
+
+    // Opportunistic consistency + GC after first paint (does not block boot)
+    const maintTimer = window.setTimeout(() => {
+      try {
+        const health = bootStorageMaintenance(profileId);
+        setStorageHealth(health);
+      } catch {
+        /* ignore */
+      }
+    }, 0);
+    return () => window.clearTimeout(maintTimer);
   }, [loadProfileIntoState]);
+
+  const refreshStorageHealth = useCallback(() => {
+    const report = diagnoseStorage();
+    setStorageHealth(report);
+    return report;
+  }, []);
+
+  const recoverBrowserStorage = useCallback(
+    (aggressive = true) => {
+      const result = recoverStorage({
+        activeProfileId: activeProfileIdRef.current,
+        aggressive,
+        lockOwner: `ui-${Date.now().toString(36)}`,
+      });
+      setStorageHealth(result.report);
+      refreshProfiles();
+      setVersions(loadVersionHistory());
+      broadcastPortfolioSync({
+        type: "storage-health",
+        rev: Date.now(),
+        level: result.report.level,
+      });
+      return result.report;
+    },
+    [refreshProfiles]
+  );
 
   // Debounced persist of *active* profile (skip pure preview browsing)
   useEffect(() => {
@@ -312,6 +371,11 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
         refreshProfiles();
       } else if (msg.type === "profiles") {
         refreshProfiles();
+      } else if (msg.type === "storage-health") {
+        // Peer reclaimed space or repaired keys — re-read registry/versions
+        refreshProfiles();
+        setVersions(loadVersionHistory());
+        setStorageHealth(diagnoseStorage());
       }
     });
 
@@ -361,6 +425,15 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [isHydrated, applyLocal, loadProfileIntoState, refreshProfiles]);
 
+  /** Coalesce rapid navbar switches — only the last profile fully loads. */
+  const switchLoadTimerRef = useRef<number | null>(null);
+  const pendingSwitchRef = useRef<{
+    profileId: ProfileId;
+    preview: boolean;
+    label: string;
+    slug: string;
+  } | null>(null);
+
   const switchProfile = useCallback(
     (profileId: ProfileId, opts?: { preview?: boolean }) => {
       const reg = ensureProfileRegistry();
@@ -371,21 +444,42 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       // Live data for the outgoing profile is already debounced-persisted.
       // Drafts live in per-profile keys and are NOT touched here.
 
+      // Optimistic UI + URL so the switcher feels instant
       if (!preview) {
         setActiveProfileId(profileId);
       }
       setActiveProfileIdState(profileId);
       setIsPreviewMode(preview);
-      loadProfileIntoState(profileId, `Switched to ${profile.label}`);
       setRemoteUpdate(null);
       writeUrlProfile(profile.slug, preview);
-      setProfiles(ensureProfileRegistry().profiles);
+      setVersionHistoryProfileId(profileId);
 
-      broadcastPortfolioSync({
-        type: "profile-switch",
-        rev: Date.now(),
+      pendingSwitchRef.current = {
         profileId,
-      });
+        preview,
+        label: profile.label,
+        slug: profile.slug,
+      };
+
+      if (switchLoadTimerRef.current != null) {
+        window.clearTimeout(switchLoadTimerRef.current);
+      }
+      // ~50ms coalesce: thrashing the select only pays for the final profile
+      switchLoadTimerRef.current = window.setTimeout(() => {
+        switchLoadTimerRef.current = null;
+        const pending = pendingSwitchRef.current;
+        if (!pending) return;
+        if (pending.profileId !== activeProfileIdRef.current) return;
+        loadProfileIntoState(
+          pending.profileId,
+          `Switched to ${pending.label}`
+        );
+        broadcastPortfolioSync({
+          type: "profile-switch",
+          rev: Date.now(),
+          profileId: pending.profileId,
+        });
+      }, 50);
     },
     [loadProfileIntoState]
   );
@@ -612,6 +706,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       deleteProfile,
       getShareUrl,
       refreshProfiles,
+      storageHealth,
+      refreshStorageHealth,
+      recoverBrowserStorage,
     }),
     [
       content,
@@ -641,6 +738,9 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
       deleteProfile,
       getShareUrl,
       refreshProfiles,
+      storageHealth,
+      refreshStorageHealth,
+      recoverBrowserStorage,
     ]
   );
 

@@ -16,11 +16,12 @@ type BootScreenProps = {
  */
 const BootScreen: FC<BootScreenProps> = ({
   ready,
-  minDurationMs = 700,
+  /** Keep short — long minDuration was the main perceived load delay. */
+  minDurationMs = 160,
   accent = "#915EFF",
   onFinished,
 }) => {
-  const [progress, setProgress] = useState(8);
+  const [progress, setProgress] = useState(32);
   const [phase, setPhase] = useState("BOOT SEQUENCE");
   const [visible, setVisible] = useState(true);
   const [exiting, setExiting] = useState(false);
@@ -42,12 +43,13 @@ const BootScreen: FC<BootScreenProps> = ({
 
     const id = window.setInterval(() => {
       setProgress((p) => {
-        if (ready) return Math.min(100, p + 12);
+        // Ready: sprint to 100 so we do not idle on the bar after hydrate
+        if (ready) return Math.min(100, p + 42);
         // Cap below 100 while hydrating so the bar never falsely hits 100%
-        if (p >= 72) return Math.min(92, p + Math.random() * 0.3);
-        return Math.min(72, p + 1.8 + Math.random() * 2.2);
+        if (p >= 82) return Math.min(94, p + Math.random() * 0.5);
+        return Math.min(82, p + 6 + Math.random() * 4);
       });
-    }, 50);
+    }, 24);
 
     return () => window.clearInterval(id);
   }, [ready, visible, exiting]);
@@ -70,29 +72,30 @@ const BootScreen: FC<BootScreenProps> = ({
       setProgress(100);
       setPhase("SYSTEM ONLINE");
       setExiting(true);
-    }, wait + 80);
+    }, wait);
 
     return () => window.clearTimeout(t);
   }, [ready, exiting, visible, started, minDurationMs]);
 
   useEffect(() => {
     if (!exiting) return;
+    // Match CSS exit transition (~120ms)
     const t = window.setTimeout(() => {
       finish();
-    }, 420);
+    }, 130);
     return () => window.clearTimeout(t);
   }, [exiting, finish]);
 
   // Hard fail-safe: never leave the shell stuck at opacity-0 if ready stalls
   useEffect(() => {
     if (!visible) return;
-    const maxMs = Math.max(minDurationMs + 2000, 8000);
+    const maxMs = Math.max(minDurationMs + 1000, 3500);
     let forceId = 0;
     const t = window.setTimeout(() => {
       setProgress(100);
       setPhase("SYSTEM ONLINE");
       setExiting(true);
-      forceId = window.setTimeout(() => finish(), 500);
+      forceId = window.setTimeout(() => finish(), 140);
     }, maxMs);
     return () => {
       window.clearTimeout(t);

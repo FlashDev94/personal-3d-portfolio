@@ -60,6 +60,13 @@ export type SyncMessage =
       type: "profiles";
       tabId: string;
       rev: number;
+    }
+  | {
+      /** Another tab reclaimed storage / repaired consistency. */
+      type: "storage-health";
+      tabId: string;
+      rev: number;
+      level?: string;
     };
 
 export const HISTORY_LIMITS = {
