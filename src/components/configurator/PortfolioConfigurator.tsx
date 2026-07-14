@@ -1838,7 +1838,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                             const isLatest = index === 0;
                             return (
                               <li
-                                key={entry.id}
+                                key={`${entry.id}-${entry.at}-${index}`}
                                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black-200/40 px-3 py-2"
                               >
                                 <div className="min-w-0">

@@ -108,17 +108,23 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
   const [diffGen, setDiffGen] = useState(0);
 
   const options = useMemo(() => {
-    const opts: Array<{ id: string; label: string }> = [
+    // Dedupe by id (newest wins) so React keys and restore targets stay stable
+    // if storage ever contains repeated snapshot ids.
+    const seen = new Set<string>([COMPARE_LIVE_ID, COMPARE_DRAFT_ID]);
+    const versionOpts: Array<{ id: string; label: string }> = [];
+    for (const v of [...versions].reverse()) {
+      if (!v?.id || seen.has(v.id)) continue;
+      seen.add(v.id);
+      versionOpts.push({
+        id: v.id,
+        label: `${v.label} · ${formatWhen(v.at)}`,
+      });
+    }
+    return [
       { id: COMPARE_LIVE_ID, label: "Live portfolio (applied)" },
       { id: COMPARE_DRAFT_ID, label: "Current draft (unsaved)" },
-      ...[...versions]
-        .reverse()
-        .map((v) => ({
-          id: v.id,
-          label: `${v.label} · ${formatWhen(v.at)}`,
-        })),
+      ...versionOpts,
     ];
-    return opts;
   }, [versions]);
 
   const fromSnap = useMemo(
@@ -227,8 +233,8 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
             value={fromId}
             onChange={(e) => setFromId(e.target.value)}
           >
-            {options.map((o) => (
-              <option key={`from-${o.id}`} value={o.id}>
+            {options.map((o, i) => (
+              <option key={`from-${i}-${o.id}`} value={o.id}>
                 {o.label}
               </option>
             ))}
@@ -251,8 +257,8 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
             value={toId}
             onChange={(e) => setToId(e.target.value)}
           >
-            {options.map((o) => (
-              <option key={`to-${o.id}`} value={o.id}>
+            {options.map((o, i) => (
+              <option key={`to-${i}-${o.id}`} value={o.id}>
                 {o.label}
               </option>
             ))}

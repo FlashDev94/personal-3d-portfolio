@@ -22,6 +22,7 @@ function readStore(): VersionStoreV1 {
     if (parsed?.v !== 1 || !Array.isArray(parsed.entries)) {
       return { v: 1, entries: [] };
     }
+    const seen = new Set<string>();
     const entries = parsed.entries
       .map((e) => {
         const data = normalizePortfolio(e.data);
@@ -33,7 +34,15 @@ function readStore(): VersionStoreV1 {
           data,
         } satisfies VersionEntry;
       })
-      .filter(Boolean) as VersionEntry[];
+      .filter(Boolean)
+      // Keep last occurrence of each id (newest write wins if storage was corrupted)
+      .reduceRight<VersionEntry[]>((acc, entry) => {
+        const e = entry as VersionEntry;
+        if (seen.has(e.id)) return acc;
+        seen.add(e.id);
+        acc.unshift(e);
+        return acc;
+      }, []);
     return { v: 1, entries };
   } catch {
     return { v: 1, entries: [] };
