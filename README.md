@@ -12,6 +12,8 @@ A configurable **React + Three.js** portfolio you can own and extend. Upload a P
 - **3D & Theme configurator** — palettes, quality, stars, auto-rotate, reduced-motion, disable 3D
 - **Resume PDF upload** — client-side parsing (no server upload)
 - **Portfolio configurator** — profile, about, experience, skills (with **configurable icons**), projects, testimonials
+- **Undo / redo + version history** — draft undo (Ctrl+Z / Ctrl+Y), applied snapshots, multi-tab sync without clobbering unsaved drafts
+- **Compare & selective restore** — diff any two saved versions (or live/draft), cherry-pick fields including icons and 3D settings into the draft
 - JSON import/export for backup and multi-device use (includes theme settings)
 - Responsive layout; EmailJS-ready contact form (optional external setup)
 
@@ -101,6 +103,7 @@ public/
 | `npm run preview` | Serve `dist/` |
 | `npm run lint` | ESLint |
 | `npm run test:parser` | Smoke-test resume parser against sample PDF |
+| `npm run test:history` | Smoke-test history fingerprint / clone helpers |
 
 ## License & attribution
 

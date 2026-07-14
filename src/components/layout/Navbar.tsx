@@ -6,6 +6,7 @@ import { logo, menu, close } from "../../assets";
 import { usePortfolio, useTheme3d } from "../../context/PortfolioContext";
 import { clampTheme3d, resolveThemeTokens } from "../../constants/theme3d";
 import { applyPaletteToDocument } from "../../utils/themeRuntime";
+import { ProfileSwitcher } from "../ProfileSwitcher";
 
 const Navbar = () => {
   const { data } = usePortfolio();
@@ -106,6 +107,7 @@ const Navbar = () => {
               </li>
             ))}
           </ul>
+          <ProfileSwitcher variant="navbar" />
           <button
             type="button"
             onClick={toggleColorMode}
@@ -123,6 +125,7 @@ const Navbar = () => {
         </div>
 
         <div className="flex flex-1 items-center justify-end gap-3 sm:hidden">
+          <ProfileSwitcher variant="navbar" className="max-w-[7.5rem]" />
           <button
             type="button"
             onClick={toggleColorMode}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FC } from "react";
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
 
 type BootScreenProps = {
   /** When true, boot sequence may complete and fade out. */
@@ -29,12 +29,12 @@ const BootScreen: FC<BootScreenProps> = ({
   const onFinishedRef = useRef(onFinished);
   onFinishedRef.current = onFinished;
 
-  const finish = () => {
+  const finish = useCallback(() => {
     if (finishedRef.current) return;
     finishedRef.current = true;
     setVisible(false);
     onFinishedRef.current?.();
-  };
+  }, []);
 
   // Smooth progress while waiting; snap toward 100 when ready
   useEffect(() => {
@@ -81,8 +81,7 @@ const BootScreen: FC<BootScreenProps> = ({
       finish();
     }, 420);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- finish uses refs
-  }, [exiting]);
+  }, [exiting, finish]);
 
   // Hard fail-safe: never leave the shell stuck at opacity-0 if ready stalls
   useEffect(() => {
@@ -99,8 +98,7 @@ const BootScreen: FC<BootScreenProps> = ({
       window.clearTimeout(t);
       if (forceId) window.clearTimeout(forceId);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- finish uses refs
-  }, [visible, minDurationMs]);
+  }, [visible, minDurationMs, finish]);
 
   if (!visible) return null;
 

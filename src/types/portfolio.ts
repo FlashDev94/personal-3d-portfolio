@@ -106,6 +106,7 @@ export type TPortfolioData = {
 
 export type ConfiguratorTab =
   | "upload"
+  | "profiles"
   | "profile"
   | "about"
   | "experience"
@@ -113,4 +114,5 @@ export type ConfiguratorTab =
   | "projects"
   | "testimonials"
   | "theme3d"
+  | "history"
   | "data";

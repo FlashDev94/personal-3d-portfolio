@@ -1,0 +1,67 @@
+import { getTabId } from "./tabId";
+import { SYNC_CHANNEL_NAME, type SyncMessage } from "./types";
+
+type Listener = (msg: SyncMessage) => void;
+
+/** Omit distributes over SyncMessage union so each variant keeps its fields. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+export type SyncMessagePayload = DistributiveOmit<SyncMessage, "tabId"> & {
+  tabId?: string;
+};
+
+let channel: BroadcastChannel | null = null;
+const listeners = new Set<Listener>();
+
+function getChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {
+    return null;
+  }
+  if (!channel) {
+    channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    channel.onmessage = (ev: MessageEvent<SyncMessage>) => {
+      const msg = ev.data;
+      if (!msg || typeof msg !== "object" || !("type" in msg)) return;
+      listeners.forEach((fn) => {
+        try {
+          fn(msg);
+        } catch (err) {
+          console.warn("portfolio sync listener failed", err);
+        }
+      });
+    };
+  }
+  return channel;
+}
+
+export function subscribePortfolioSync(listener: Listener): () => void {
+  getChannel();
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && channel) {
+      try {
+        channel.close();
+      } catch {
+        /* ignore */
+      }
+      channel = null;
+    }
+  };
+}
+
+export function broadcastPortfolioSync(message: SyncMessagePayload): void {
+  const tabId = message.tabId ?? getTabId();
+  const full = { ...message, tabId } as SyncMessage;
+  try {
+    getChannel()?.postMessage(full);
+  } catch (err) {
+    console.warn("portfolio sync broadcast failed", err);
+  }
+}
+
+export function isForeignTab(msg: SyncMessage): boolean {
+  return msg.tabId !== getTabId();
+}
