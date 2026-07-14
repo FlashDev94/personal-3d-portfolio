@@ -70,6 +70,14 @@ export function previewValue(value: unknown, kind: DiffKind = "text"): string {
   }
   if (typeof value === "string") {
     if (kind === "icon" || value.startsWith("data:image/")) {
+      // Lazy import avoided — lightweight check inline for preview path
+      if (
+        value.startsWith("data:image/svg+xml") &&
+        (value.includes('width="1"') || value.includes("width%3D%221%22")) &&
+        (value.includes('height="1"') || value.includes("height%3D%221%22"))
+      ) {
+        return "trimmed placeholder (storage full)";
+      }
       const kb = Math.max(1, Math.round(value.length / 1024));
       const mime = value.startsWith("data:")
         ? value.slice(5, value.indexOf(";") > 0 ? value.indexOf(";") : 20)
@@ -681,7 +689,43 @@ function setDeep(obj: Record<string, unknown>, path: string[], value: unknown): 
  *
  * Diff entry ids encode add/remove; path encodes set targets.
  */
-function applyOneEntry(base: TPortfolioData, entry: PortfolioDiffEntry): void {
+export type ApplySkipReason =
+  | "item_missing"
+  | "remove_missing"
+  | "add_null"
+  | "unhandled_path";
+
+export type ApplySkip = {
+  id: string;
+  reason: ApplySkipReason;
+  label: string;
+};
+
+export type ApplySelectedResult = {
+  data: TPortfolioData;
+  appliedIds: string[];
+  skipped: ApplySkip[];
+};
+
+function findKeyedIndex(
+  list: unknown[],
+  root: ArrayRoot,
+  key: string
+): number {
+  const kf = keyFnForArray(root);
+  return list.findIndex((item, i) => {
+    const k = kf(item, i);
+    return k === key || `${k}#${i}` === key;
+  });
+}
+
+/**
+ * @returns null on success, or a skip reason on no-op failure.
+ */
+function applyOneEntry(
+  base: TPortfolioData,
+  entry: PortfolioDiffEntry
+): ApplySkipReason | null {
   const id = entry.id;
 
   // Array add / remove / whole-item replace via id prefixes
@@ -691,10 +735,12 @@ function applyOneEntry(base: TPortfolioData, entry: PortfolioDiffEntry): void {
   if (addMatch) {
     const root = addMatch[1] as ArrayRoot;
     const list = base[root] as unknown[];
-    if (entry.toValue != null) {
-      list.push(cloneJson(entry.toValue));
-    }
-    return;
+    if (entry.toValue == null) return "add_null";
+    // Idempotent: skip if key already present (e.g. re-merge after add)
+    const key = addMatch[2];
+    if (findKeyedIndex(list, root, key) >= 0) return null;
+    list.push(cloneJson(entry.toValue));
+    return null;
   }
 
   const removeMatch = id.match(
@@ -704,14 +750,10 @@ function applyOneEntry(base: TPortfolioData, entry: PortfolioDiffEntry): void {
     const root = removeMatch[1] as ArrayRoot;
     const key = removeMatch[2];
     const list = base[root] as unknown[];
-    const kf = keyFnForArray(root);
-    const idx = list.findIndex((item, i) => {
-      let k = kf(item, i);
-      // Match disambiguated keys from indexByKey
-      return k === key || `${k}#${i}` === key;
-    });
-    if (idx >= 0) list.splice(idx, 1);
-    return;
+    const idx = findKeyedIndex(list, root, key);
+    if (idx < 0) return "remove_missing";
+    list.splice(idx, 1);
+    return null;
   }
 
   const replaceMatch = id.match(
@@ -721,15 +763,12 @@ function applyOneEntry(base: TPortfolioData, entry: PortfolioDiffEntry): void {
     const root = replaceMatch[1] as ArrayRoot;
     const key = replaceMatch[2];
     const list = base[root] as unknown[];
-    const kf = keyFnForArray(root);
-    const idx = list.findIndex((item, i) => {
-      const k = kf(item, i);
-      return k === key || `${k}#${i}` === key;
-    });
-    if (idx >= 0 && entry.toValue != null) {
+    const idx = findKeyedIndex(list, root, key);
+    if (idx < 0) return "item_missing";
+    if (entry.toValue != null) {
       list[idx] = cloneJson(entry.toValue);
     }
-    return;
+    return null;
   }
 
   // Array field: technologies[key=React].icon
@@ -741,40 +780,41 @@ function applyOneEntry(base: TPortfolioData, entry: PortfolioDiffEntry): void {
     const key = arrayField[2];
     const field = arrayField[3];
     const list = base[root] as Record<string, unknown>[];
-    const kf = keyFnForArray(root);
-    const idx = list.findIndex((item, i) => {
-      const k = kf(item, i);
-      return k === key || `${k}#${i}` === key;
-    });
+    const idx = findKeyedIndex(list, root, key);
     if (idx < 0) {
-      // Item missing on base — if we have a full toValue for whole item, skip field set
-      return;
+      return "item_missing";
     }
     if (!field) {
-      if (entry.toValue != null) list[idx] = cloneJson(entry.toValue) as Record<string, unknown>;
-      return;
+      if (entry.toValue != null) {
+        list[idx] = cloneJson(entry.toValue) as Record<string, unknown>;
+      }
+      return null;
     }
     list[idx] = { ...list[idx], [field]: cloneJson(entry.toValue) };
-    return;
+    return null;
   }
 
   // Whole theme object
   if (entry.path === "theme3d") {
     base.theme3d = clampTheme3d(entry.toValue as TTheme3d);
-    return;
+    return null;
   }
 
   // Dot path into portfolio
   const parts = entry.path.split(".");
   if (parts[0] && ARRAY_ROOTS.has(parts[0])) {
-    // Should have been handled above
-    return;
+    return "unhandled_path";
   }
-  setDeep(base as unknown as Record<string, unknown>, parts, cloneJson(entry.toValue));
+  setDeep(
+    base as unknown as Record<string, unknown>,
+    parts,
+    cloneJson(entry.toValue)
+  );
 
   if (parts[0] === "theme3d") {
     base.theme3d = clampTheme3d(base.theme3d);
   }
+  return null;
 }
 
 function cloneJson<T>(value: T): T {
@@ -785,10 +825,14 @@ function cloneJson<T>(value: T): T {
 
 /**
  * Apply selected diff entries onto a base portfolio.
- * Returns a new cloned portfolio; does not mutate inputs.
+ * Returns a new cloned portfolio plus applied/skipped accounting.
+ * Does not mutate inputs.
  *
  * Selected entries take the `toValue` (compare side). Unselected differences
  * are left as in `base`.
+ *
+ * Apply order: removes → adds → replaces/field sets. Adds run before field
+ * patches so selecting "add item" + "item.icon" in one merge succeeds.
  */
 function clonePortfolioLocal(data: TPortfolioData): TPortfolioData {
   return JSON.parse(JSON.stringify(data)) as TPortfolioData;
@@ -798,24 +842,35 @@ export function applySelectedDiffs(
   base: TPortfolioData,
   entries: PortfolioDiffEntry[],
   selectedIds: Iterable<string>
-): TPortfolioData {
+): ApplySelectedResult {
   const selected = new Set(selectedIds);
   const next = clonePortfolioLocal(base);
 
-  // Order: removes first, then field sets / replaces, then adds —
-  // avoids index churn when multiple list ops are selected.
   const chosen = entries.filter((e) => selected.has(e.id));
   const removes = chosen.filter((e) => e.id.includes(":remove:"));
-  const rest = chosen.filter((e) => !e.id.includes(":remove:"));
-  const adds = rest.filter((e) => e.id.includes(":add:"));
-  const middles = rest.filter((e) => !e.id.includes(":add:"));
+  const adds = chosen.filter((e) => e.id.includes(":add:"));
+  const middles = chosen.filter(
+    (e) => !e.id.includes(":remove:") && !e.id.includes(":add:")
+  );
 
-  for (const e of removes) applyOneEntry(next, e);
-  for (const e of middles) applyOneEntry(next, e);
-  for (const e of adds) applyOneEntry(next, e);
+  const appliedIds: string[] = [];
+  const skipped: ApplySkip[] = [];
+
+  const run = (e: PortfolioDiffEntry) => {
+    const reason = applyOneEntry(next, e);
+    if (reason) {
+      skipped.push({ id: e.id, reason, label: e.label });
+    } else {
+      appliedIds.push(e.id);
+    }
+  };
+
+  for (const e of removes) run(e);
+  for (const e of adds) run(e);
+  for (const e of middles) run(e);
 
   next.theme3d = clampTheme3d(next.theme3d);
-  return next;
+  return { data: next, appliedIds, skipped };
 }
 
 /**
@@ -825,7 +880,11 @@ export function applyAllDiffs(
   base: TPortfolioData,
   from: TPortfolioData,
   to: TPortfolioData
-): TPortfolioData {
+): ApplySelectedResult {
   const entries = diffPortfolios(from, to);
-  return applySelectedDiffs(base, entries, entries.map((e) => e.id));
+  return applySelectedDiffs(
+    base,
+    entries,
+    entries.map((e) => e.id)
+  );
 }

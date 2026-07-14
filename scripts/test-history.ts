@@ -185,7 +185,9 @@ function testSelectiveRestorePreservesUnselected() {
     )
     .map((d) => d.id);
 
-  const merged = applySelectedDiffs(a, diffs, onlyNameAndIcon);
+  const { data: merged, appliedIds, skipped } = applySelectedDiffs(a, diffs, onlyNameAndIcon);
+  assert.ok(appliedIds.length >= 2);
+  assert.equal(skipped.length, 0);
   assert.equal(merged.config.hero.name, "PatchedName");
   assert.equal(merged.technologies[0].icon, "data:image/png;base64,SELECTIVE");
   // Unselected must stay at base
@@ -217,11 +219,11 @@ function testListAddRemove() {
   assert.ok(add, "expected add Rust");
   assert.ok(remove, "expected remove React");
 
-  const onlyAdd = applySelectedDiffs(a, diffs, [add!.id]);
+  const onlyAdd = applySelectedDiffs(a, diffs, [add!.id]).data;
   assert.ok(onlyAdd.technologies.some((t) => t.name === "Rust"));
   assert.ok(onlyAdd.technologies.some((t) => t.name === "React"));
 
-  const onlyRemove = applySelectedDiffs(a, diffs, [remove!.id]);
+  const onlyRemove = applySelectedDiffs(a, diffs, [remove!.id]).data;
   assert.ok(!onlyRemove.technologies.some((t) => t.name === "React"));
   assert.ok(!onlyRemove.technologies.some((t) => t.name === "Rust"));
 }
@@ -236,7 +238,7 @@ function testExperiencePointsAndIcon() {
   const icon = diffs.find((d) => d.id.includes("experiences") && d.id.endsWith(":icon"));
   assert.ok(points);
   assert.ok(icon);
-  const merged = applySelectedDiffs(a, diffs, [points!.id, icon!.id]);
+  const merged = applySelectedDiffs(a, diffs, [points!.id, icon!.id]).data;
   assert.deepEqual(merged.experiences[0].points, ["New bullet", "Second"]);
   assert.equal(merged.experiences[0].icon, "data:image/png;base64,companyicon");
 }
@@ -256,11 +258,11 @@ function testRepeatedSelectiveRestoreStable() {
     if (diffs.length === 0) break;
     // Apply half the remaining diffs each iteration
     const pick = diffs.filter((_, idx) => idx % 2 === 0).map((d) => d.id);
-    cur = applySelectedDiffs(cur, diffs, pick.length ? pick : [diffs[0].id]);
+    cur = applySelectedDiffs(cur, diffs, pick.length ? pick : [diffs[0].id]).data;
   }
   // Final full apply
   const remaining = diffPortfolios(cur, target);
-  cur = applySelectedDiffs(cur, remaining, remaining.map((d) => d.id));
+  cur = applySelectedDiffs(cur, remaining, remaining.map((d) => d.id)).data;
   assert.equal(cur.config.hero.name, "Final");
   assert.equal(cur.theme3d.quality, "high");
   assert.equal(cur.theme3d.colorMode, "light");
@@ -276,3 +278,46 @@ testExperiencePointsAndIcon();
 testIdenticalSnapshotsEmptyDiff();
 testRepeatedSelectiveRestoreStable();
 console.log("version diff / selective restore tests: ok");
+
+
+function testFieldSkipWhenItemMissing() {
+  const a = sample();
+  const b = sample();
+  b.technologies = [
+    ...b.technologies,
+    { name: "Go", icon: "data:image/png;base64,goicon" },
+  ];
+  const diffs = diffPortfolios(a, b);
+  const iconOnly = diffs.find((d) => d.id.includes("Go") && d.id.endsWith(":icon"));
+  const add = diffs.find((d) => d.id.includes(":add:") && d.id.includes("Go"));
+  assert.ok(add);
+  // Field-only without add → skipped
+  if (iconOnly) {
+    const r = applySelectedDiffs(a, diffs, [iconOnly.id]);
+    assert.ok(r.skipped.some((s) => s.reason === "item_missing"));
+  }
+  // Add then field in one selection → both apply (adds run first)
+  const withAdd = applySelectedDiffs(
+    a,
+    diffs,
+    [add!.id, ...(iconOnly ? [iconOnly.id] : [])]
+  );
+  assert.ok(withAdd.data.technologies.some((t) => t.name === "Go"));
+  assert.equal(withAdd.skipped.length, 0);
+}
+
+function testTrimmedPlaceholderPreview() {
+  const a = sample();
+  const b = sample();
+  const stub =
+    "data:image/svg+xml," +
+    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+  b.technologies[0].icon = stub;
+  const diffs = diffPortfolios(a, b);
+  const iconDiff = diffs.find((d) => d.kind === "icon");
+  assert.ok(iconDiff);
+  assert.ok(previewValue(stub, "icon").includes("trimmed"));
+}
+
+testFieldSkipWhenItemMissing();
+testTrimmedPlaceholderPreview();

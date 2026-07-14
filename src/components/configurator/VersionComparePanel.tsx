@@ -5,6 +5,7 @@ import {
   applySelectedDiffs,
   diffPortfolios,
   groupDiffEntries,
+  isTrimmedIconPlaceholder,
   portfolioFingerprint,
   type DiffGroup,
   type PortfolioDiffEntry,
@@ -127,15 +128,15 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
     ];
   }, [versions]);
 
-  const fromSnap = useMemo(
-    () => resolveSnapshot(fromId, versions, live, draft),
-    // draft/live intentionally included so draft endpoint stays current
-    [fromId, versions, live, draft, diffGen]
-  );
-  const toSnap = useMemo(
-    () => resolveSnapshot(toId, versions, live, draft),
-    [toId, versions, live, draft, diffGen]
-  );
+  // diffGen forces re-resolve after a merge so draft endpoint reflects new state
+  const fromSnap = useMemo(() => {
+    void diffGen;
+    return resolveSnapshot(fromId, versions, live, draft);
+  }, [fromId, versions, live, draft, diffGen]);
+  const toSnap = useMemo(() => {
+    void diffGen;
+    return resolveSnapshot(toId, versions, live, draft);
+  }, [toId, versions, live, draft, diffGen]);
 
   const entries = useMemo(() => {
     if (!fromSnap || !toSnap) return [] as PortfolioDiffEntry[];
@@ -152,9 +153,12 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
   const grouped = useMemo(() => groupDiffEntries(entries), [entries]);
 
   // When the pair or entry set changes, default-select all new ids
-  const entryIdsKey = entries.map((e) => e.id).join("\0");
+  const entryIdsKey = useMemo(
+    () => entries.map((e) => e.id).join("\0"),
+    [entries]
+  );
   React.useEffect(() => {
-    setSelected(new Set(entries.map((e) => e.id)));
+    setSelected(new Set(entryIdsKey ? entryIdsKey.split("\0") : []));
   }, [fromId, toId, entryIdsKey]);
 
   const toggle = (id: string) => {
@@ -191,12 +195,29 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
       // Apply onto current draft (not the "from" snapshot) so unrelated
       // draft edits outside the compared pair are preserved when possible.
       // Selected paths take the "to" (compare) side values.
-      const next = applySelectedDiffs(draft, entries, selected);
-      const label = `Selective restore (${selectedCount}) from “${toSnap.label}”`;
-      onApplyToDraft(next, label);
+      // Order inside applySelectedDiffs: removes → adds → field sets.
+      const result = applySelectedDiffs(draft, entries, selected);
+      const applied = result.appliedIds.length;
+      const skipped = result.skipped;
+      if (applied === 0 && skipped.length > 0) {
+        onError?.(
+          `Could not apply selected changes: ${skipped
+            .slice(0, 3)
+            .map((s) => s.label)
+            .join("; ")}${skipped.length > 3 ? "…" : ""}. ` +
+            `If an item was renamed between versions, also select the matching “Add …” row.`
+        );
+        return;
+      }
+      const label = `Selective restore (${applied}) from “${toSnap.label}”`;
+      onApplyToDraft(result.data, label);
       onError?.(null);
+      const skipNote =
+        skipped.length > 0
+          ? ` ${skipped.length} skipped (item missing on draft — select “Add …” for new rows).`
+          : "";
       onStatus?.(
-        `Merged ${selectedCount} change${selectedCount === 1 ? "" : "s"} from “${toSnap.label}” into your draft. Undo to reverse; Apply to publish live.`
+        `Merged ${applied} change${applied === 1 ? "" : "s"} from “${toSnap.label}” into your draft.${skipNote} Undo to reverse; Apply to publish live and other tabs.`
       );
       setDiffGen((g) => g + 1);
     } catch (err) {
@@ -218,8 +239,12 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
         <p className="text-sm text-secondary">
           Pick any two snapshots (saved versions, live site, or current draft).
           Review differences — including uploaded icons and 3D settings — then
-          merge only the changes you want into the draft. Live portfolio and
-          other tabs are untouched until you Apply.
+          merge only the changes you want into the <strong className="font-medium text-white/80">draft</strong>.
+          Live portfolio and other tabs stay unchanged until you click{" "}
+          <strong className="font-medium text-white/80">Apply to portfolio</strong>.
+          Renamed skills/roles appear as remove + add; select both (or the add)
+          when restoring a renamed item. Icons marked “trimmed placeholder” were
+          reduced when browser storage was full.
         </p>
       </div>
 
@@ -343,6 +368,13 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
                             <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-secondary">
                               {kindBadge(entry.kind)}
                             </span>
+                            {entry.kind === "icon" &&
+                            (isTrimmedIconPlaceholder(entry.fromValue) ||
+                              isTrimmedIconPlaceholder(entry.toValue)) ? (
+                              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-200">
+                                trimmed
+                              </span>
+                            ) : null}
                           </span>
                           <span className="block truncate text-xs text-secondary">
                             {entry.summary}

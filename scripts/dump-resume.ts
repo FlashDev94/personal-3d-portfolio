@@ -1,7 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import { createRequire } from "module";
 
 // Use the same path as test-resume-parser
 async function main() {

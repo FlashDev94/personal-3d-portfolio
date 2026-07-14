@@ -49,13 +49,26 @@ function readStore(): VersionStoreV1 {
   }
 }
 
+/** Marker SVG used when a snapshot was trimmed to fit localStorage. */
+export const TRIMMED_ICON_PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
+)}`;
+
+export function isTrimmedIconPlaceholder(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  if (value === TRIMMED_ICON_PLACEHOLDER) return true;
+  if (!value.startsWith("data:image/svg+xml")) return false;
+  return (
+    (value.includes('width="1"') || value.includes("width%3D%221%22")) &&
+    (value.includes('height="1"') || value.includes("height%3D%221%22"))
+  );
+}
+
 function stripHeavyDataUrls(data: TPortfolioData): TPortfolioData {
   const next = clonePortfolio(data);
   const scrub = (s: string) =>
     s.startsWith("data:image/") && s.length > 2_000
-      ? `data:image/svg+xml,${encodeURIComponent(
-          '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
-        )}`
+      ? TRIMMED_ICON_PLACEHOLDER
       : s;
 
   next.technologies = next.technologies.map((t) => ({

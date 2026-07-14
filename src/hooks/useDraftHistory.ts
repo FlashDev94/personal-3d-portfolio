@@ -97,6 +97,9 @@ export function useDraftHistory(
     setIsDirty(portfolioFingerprint(presentRef.current) !== baseFpRef.current);
   }, []);
 
+  /** Last fingerprint successfully written to draft storage (dedupe thrash). */
+  const lastPersistedFpRef = useRef<string | null>(null);
+
   const schedulePersist = useCallback(() => {
     if (persistTimerRef.current != null) {
       window.clearTimeout(persistTimerRef.current);
@@ -105,10 +108,14 @@ export function useDraftHistory(
       persistTimerRef.current = null;
       const fp = portfolioFingerprint(presentRef.current);
       if (fp === baseFpRef.current) {
+        lastPersistedFpRef.current = null;
         clearPersistedDraft();
         return;
       }
-      savePersistedDraft(presentRef.current, baseFpRef.current);
+      // Skip identical re-writes (rapid selective restore / theme thrash).
+      if (lastPersistedFpRef.current === fp) return;
+      const ok = savePersistedDraft(presentRef.current, baseFpRef.current);
+      if (ok) lastPersistedFpRef.current = fp;
     }, HISTORY_LIMITS.draftPersistMs);
   }, []);
 

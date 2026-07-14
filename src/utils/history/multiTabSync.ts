@@ -32,6 +32,16 @@ export function subscribePortfolioSync(listener: Listener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+    // Close the singleton when the last subscriber leaves so HMR / remounts
+    // do not keep a stale channel with zero listeners alive.
+    if (listeners.size === 0 && channel) {
+      try {
+        channel.close();
+      } catch {
+        /* ignore */
+      }
+      channel = null;
+    }
   };
 }
 

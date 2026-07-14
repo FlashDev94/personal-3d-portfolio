@@ -121,6 +121,9 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     refreshVersions,
   } = usePortfolioAll();
 
+  // Capture live portfolio only on first mount so later live/remote updates
+  // do not wipe an in-progress draft via this memo.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only seed
   const initialBundle = useMemo(() => buildInitialDraft(data), []);
   const {
     draft,

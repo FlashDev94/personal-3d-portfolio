@@ -174,10 +174,14 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (!isHydrated) return;
 
+    let remoteGateTimer: number | null = null;
+
     const ingestRemote = (label?: string) => {
       const stored = parsePortfolioJson(localStorage.getItem(STORAGE_KEY));
       if (!stored) return;
       const fp = portfolioFingerprint(stored);
+      // Dedupe: same live fingerprint means we already applied this snapshot
+      // (BroadcastChannel + storage event often fire for one Apply).
       if (fp === liveFpRef.current) return;
 
       applyingRemoteRef.current = true;
@@ -189,8 +193,10 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
         label,
         fingerprint: fp,
       });
-      window.setTimeout(() => {
+      if (remoteGateTimer != null) window.clearTimeout(remoteGateTimer);
+      remoteGateTimer = window.setTimeout(() => {
         applyingRemoteRef.current = false;
+        remoteGateTimer = null;
       }, 250);
     };
 
@@ -218,6 +224,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => {
       unsub();
       window.removeEventListener("storage", onStorage);
+      if (remoteGateTimer != null) window.clearTimeout(remoteGateTimer);
+      applyingRemoteRef.current = false;
     };
   }, [isHydrated, applyLocal]);
 
@@ -229,7 +237,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
     if (partial.theme3d) {
       setTheme3d((prev) => clampTheme3d({ ...prev, ...partial.theme3d }));
     }
-    const { theme3d: _t, ...rest } = partial;
+    const { theme3d: _ignoredTheme, ...rest } = partial;
+    void _ignoredTheme;
     if (Object.keys(rest).length === 0) return;
     setContent((prev) => {
       const next = { ...prev, ...rest } as TPortfolioContent;
