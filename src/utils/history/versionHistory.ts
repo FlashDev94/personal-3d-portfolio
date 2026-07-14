@@ -11,6 +11,8 @@ import {
   internPortfolioAssets,
   resolvePortfolioAssets,
 } from "../profiles/assets";
+import { safeSetItem } from "../storage/safeSet";
+import { recoverStorage } from "../storage/health";
 
 /** Active profile for version history ops (set by PortfolioProvider). */
 let activeProfileId: string | null = null;
@@ -113,42 +115,46 @@ function stripHeavyDataUrls(data: TPortfolioData): TPortfolioData {
 function writeStore(store: VersionStoreV1): boolean {
   try {
     let entries = store.entries.slice(-HISTORY_LIMITS.maxVersions);
+    const key = versionsKey();
     for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        localStorage.setItem(
-          versionsKey(),
-          JSON.stringify({ v: 1, entries })
-        );
+      const payload = JSON.stringify({ v: 1, entries });
+      const onQuota = () => {
+        recoverStorage({
+          activeProfileId,
+          aggressive: attempt > 2,
+        });
+      };
+      if (safeSetItem(key, payload, { onQuota })) {
         return true;
-      } catch {
-        if (entries.length > 1) {
-          entries = entries.slice(1);
-          continue;
+      }
+      if (entries.length > 1) {
+        entries = entries.slice(1);
+        continue;
+      }
+      // Last entry still too large — strip heavy data URLs + global recovery
+      if (entries.length === 1) {
+        recoverStorage({ activeProfileId, aggressive: true });
+        entries = [
+          {
+            ...entries[0],
+            data: stripHeavyDataUrls(entries[0].data),
+            label: `${entries[0].label} (icons trimmed)`,
+          },
+        ];
+        if (
+          safeSetItem(key, JSON.stringify({ v: 1, entries }), {
+            onQuota: () =>
+              recoverStorage({ activeProfileId, aggressive: true }),
+          })
+        ) {
+          return true;
         }
-        // Last entry still too large — strip heavy data URLs
-        if (entries.length === 1) {
-          entries = [
-            {
-              ...entries[0],
-              data: stripHeavyDataUrls(entries[0].data),
-              label: `${entries[0].label} (icons trimmed)`,
-            },
-          ];
-          try {
-            localStorage.setItem(
-              versionsKey(),
-              JSON.stringify({ v: 1, entries })
-            );
-            return true;
-          } catch {
-            console.warn(
-              "Version history storage full; could not persist snapshot."
-            );
-            return false;
-          }
-        }
+        console.warn(
+          "Version history storage full; could not persist snapshot."
+        );
         return false;
       }
+      return false;
     }
     return false;
   } catch {

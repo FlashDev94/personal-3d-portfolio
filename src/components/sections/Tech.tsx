@@ -17,9 +17,9 @@ const Tech = () => {
 
   return (
     <div className="flex flex-row flex-wrap justify-center gap-10">
-      {technologies.map((technology) => (
+      {technologies.map((technology, index) => (
         <div
-          key={technology.name}
+          key={`${technology.name}-${index}`}
           className="group flex h-28 w-28 flex-col items-center justify-center"
           title={technology.name}
         >

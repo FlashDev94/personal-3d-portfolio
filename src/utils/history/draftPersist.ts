@@ -6,6 +6,8 @@ import {
   internPortfolioAssets,
   resolvePortfolioAssets,
 } from "../profiles/assets";
+import { safeSetItem } from "../storage/safeSet";
+import { recoverStorage } from "../storage/health";
 
 function draftKey(profileId?: string | null): string {
   return profileId ? profileDraftKey(profileId) : DRAFT_STORAGE_KEY;
@@ -44,18 +46,21 @@ export function savePersistedDraft(
     // Intern icons so drafts for multiple profiles share asset blobs
     data: internPortfolioAssets(clonePortfolio(data)),
   };
-  try {
-    localStorage.setItem(draftKey(profileId), JSON.stringify(payload));
-    return true;
-  } catch (err) {
-    console.warn("Failed to persist unsaved draft", err);
+  const key = draftKey(profileId);
+  const ok = safeSetItem(key, JSON.stringify(payload), {
+    onQuota: () => {
+      recoverStorage({ activeProfileId: profileId, aggressive: true });
+    },
+  });
+  if (!ok) {
+    console.warn("Failed to persist unsaved draft after recovery");
     try {
-      localStorage.removeItem(draftKey(profileId));
+      localStorage.removeItem(key);
     } catch {
       /* ignore */
     }
-    return false;
   }
+  return ok;
 }
 
 export function clearPersistedDraft(profileId?: string | null): void {

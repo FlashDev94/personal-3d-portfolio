@@ -1,5 +1,6 @@
 import type { TPortfolioData } from "../../types/portfolio";
 import { ASSET_STORE_KEY, type AssetStoreV1 } from "./types";
+import { safeSetItem } from "../storage/safeSet";
 
 function cloneJson<T>(data: T): T {
   return JSON.parse(JSON.stringify(data)) as T;
@@ -16,44 +17,66 @@ function fnv1a(str: string): string {
   return (h >>> 0).toString(36);
 }
 
+/**
+ * In-memory cache keyed by raw localStorage string so multi-tab GC / test
+ * clears revalidate without re-parsing on every icon resolve during switches.
+ */
+let storeCache: AssetStoreV1 | null = null;
+let storeCacheRaw: string | null | undefined = undefined;
+
 function readStore(): AssetStoreV1 {
   try {
     const raw = localStorage.getItem(ASSET_STORE_KEY);
-    if (!raw) return { v: 1, blobs: {} };
+    if (storeCache && storeCacheRaw === raw) return storeCache;
+    storeCacheRaw = raw;
+    if (!raw) {
+      storeCache = { v: 1, blobs: {} };
+      return storeCache;
+    }
     const parsed = JSON.parse(raw) as AssetStoreV1;
     if (parsed?.v !== 1 || !parsed.blobs || typeof parsed.blobs !== "object") {
-      return { v: 1, blobs: {} };
+      storeCache = { v: 1, blobs: {} };
+      return storeCache;
     }
-    return { v: 1, blobs: { ...parsed.blobs } };
+    storeCache = { v: 1, blobs: { ...parsed.blobs } };
+    return storeCache;
   } catch {
-    return { v: 1, blobs: {} };
+    storeCache = { v: 1, blobs: {} };
+    storeCacheRaw = undefined;
+    return storeCache;
   }
 }
 
+function invalidateStoreCache(): void {
+  storeCache = null;
+  storeCacheRaw = undefined;
+}
+
 function writeStore(store: AssetStoreV1): boolean {
-  try {
-    localStorage.setItem(ASSET_STORE_KEY, JSON.stringify(store));
+  const payload = JSON.stringify(store);
+  if (safeSetItem(ASSET_STORE_KEY, payload)) {
+    storeCache = { v: 1, blobs: { ...store.blobs } };
+    storeCacheRaw = payload;
     return true;
-  } catch (err) {
-    console.warn("Asset store write failed (quota?)", err);
-    // Drop oldest-ish keys until it fits (object key order is insertion order)
-    const keys = Object.keys(store.blobs);
-    const blobs = { ...store.blobs };
-    while (keys.length > 0) {
-      const drop = keys.shift()!;
-      delete blobs[drop];
-      try {
-        localStorage.setItem(
-          ASSET_STORE_KEY,
-          JSON.stringify({ v: 1, blobs })
-        );
-        return true;
-      } catch {
-        /* keep pruning */
-      }
-    }
-    return false;
   }
+
+  // Drop oldest-ish keys until it fits (object key order is insertion order).
+  // Avoid importing recoverStorage here (circular with health → assets).
+  console.warn("Asset store write failed; pruning blobs");
+  const keys = Object.keys(store.blobs);
+  const blobs = { ...store.blobs };
+  while (keys.length > 0) {
+    const drop = keys.shift()!;
+    delete blobs[drop];
+    const pruned = JSON.stringify({ v: 1, blobs });
+    if (safeSetItem(ASSET_STORE_KEY, pruned)) {
+      storeCache = { v: 1, blobs };
+      storeCacheRaw = pruned;
+      return true;
+    }
+  }
+  invalidateStoreCache();
+  return false;
 }
 
 export function isAssetRef(value: string): boolean {
@@ -134,4 +157,9 @@ export function assetStoreStats(): { count: number; approxChars: number } {
   let approxChars = 0;
   for (const k of keys) approxChars += store.blobs[k]?.length ?? 0;
   return { count: keys.length, approxChars };
+}
+
+/** Call after external recovery mutates the asset store key. */
+export function invalidateAssetStoreCache(): void {
+  invalidateStoreCache();
 }

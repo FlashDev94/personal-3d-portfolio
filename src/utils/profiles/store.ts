@@ -2,6 +2,8 @@ import type { TPortfolioData } from "../../types/portfolio";
 import { defaultPortfolioData, STORAGE_KEY } from "../../constants/defaults";
 import { clampTheme3d } from "../../constants/theme3d";
 import { clonePortfolio, parsePortfolioJson } from "../history/clone";
+import { safeSetItem } from "../storage/safeSet";
+import { recoverStorage } from "../storage/health";
 import {
   internPortfolioAssets,
   resolvePortfolioAssets,
@@ -58,13 +60,13 @@ export function readRegistry(): ProfileRegistryV1 | null {
 }
 
 export function writeRegistry(registry: ProfileRegistryV1): boolean {
-  try {
-    localStorage.setItem(PROFILE_REGISTRY_KEY, JSON.stringify(registry));
-    return true;
-  } catch (err) {
-    console.warn("Failed to persist profile registry", err);
-    return false;
-  }
+  const ok = safeSetItem(PROFILE_REGISTRY_KEY, JSON.stringify(registry), {
+    onQuota: () => {
+      recoverStorage({ aggressive: true });
+    },
+  });
+  if (!ok) console.warn("Failed to persist profile registry");
+  return ok;
 }
 
 /** Load applied portfolio for a profile (resolved assets for display). */
@@ -89,18 +91,19 @@ export function saveProfileData(
 ): boolean {
   try {
     const interned = internPortfolioAssets(data);
-    localStorage.setItem(
-      profileConfigKey(profileId),
-      JSON.stringify(interned)
-    );
+    const json = JSON.stringify(interned);
+    const onQuota = () => {
+      recoverStorage({ activeProfileId: profileId, aggressive: true });
+    };
+    const ok = safeSetItem(profileConfigKey(profileId), json, { onQuota });
+    if (!ok) {
+      console.warn("Failed to save profile data after recovery");
+      return false;
+    }
     // Keep legacy key in sync for the active profile (back-compat tools)
     const reg = readRegistry();
     if (reg?.activeId === profileId) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(interned));
-      } catch {
-        /* non-fatal */
-      }
+      safeSetItem(STORAGE_KEY, json, { onQuota });
     }
     return true;
   } catch (err) {

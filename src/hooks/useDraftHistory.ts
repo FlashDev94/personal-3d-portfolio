@@ -8,6 +8,7 @@ import {
 import type { TPortfolioData } from "../types/portfolio";
 import {
   HISTORY_LIMITS,
+  broadcastPortfolioSync,
   clonePortfolio,
   portfolioFingerprint,
   savePersistedDraft,
@@ -102,6 +103,21 @@ export function useDraftHistory(
   /** Last fingerprint successfully written to draft storage (dedupe thrash). */
   const lastPersistedFpRef = useRef<string | null>(null);
 
+  const notifyDraftPersisted = useCallback(
+    (fp: string) => {
+      if (!profileId) return;
+      broadcastPortfolioSync({
+        type: "draft",
+        rev: Date.now(),
+        profileId,
+        fingerprint: fp,
+        updatedAt: Date.now(),
+        baseFingerprint: baseFpRef.current,
+      });
+    },
+    [profileId]
+  );
+
   const schedulePersist = useCallback(() => {
     if (persistTimerRef.current != null) {
       window.clearTimeout(persistTimerRef.current);
@@ -117,9 +133,12 @@ export function useDraftHistory(
       // Skip identical re-writes (rapid selective restore / theme thrash).
       if (lastPersistedFpRef.current === fp) return;
       const ok = savePersistedDraft(presentRef.current, baseFpRef.current, profileId);
-      if (ok) lastPersistedFpRef.current = fp;
+      if (ok) {
+        lastPersistedFpRef.current = fp;
+        notifyDraftPersisted(fp);
+      }
     }, HISTORY_LIMITS.draftPersistMs);
-  }, [profileId]);
+  }, [profileId, notifyDraftPersisted]);
 
   const pushPast = useCallback((entry: StackEntry) => {
     pastRef.current = [...pastRef.current, entry].slice(
@@ -301,7 +320,21 @@ export function useDraftHistory(
       }
       const fp = portfolioFingerprint(presentRef.current);
       if (fp !== baseFpRef.current) {
-        savePersistedDraft(presentRef.current, baseFpRef.current, profileId);
+        const ok = savePersistedDraft(
+          presentRef.current,
+          baseFpRef.current,
+          profileId
+        );
+        if (ok && profileId) {
+          broadcastPortfolioSync({
+            type: "draft",
+            rev: Date.now(),
+            profileId,
+            fingerprint: fp,
+            updatedAt: Date.now(),
+            baseFingerprint: baseFpRef.current,
+          });
+        }
       }
     };
   }, [profileId]);

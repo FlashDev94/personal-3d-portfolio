@@ -11,7 +11,9 @@
     "ts:check": "tsc --noEmit",
     "test:parser": "npx --yes tsx scripts/test-resume-parser.ts",
     "test:history": "npx --yes tsx scripts/test-history.ts",
-    "test:profiles": "npx --yes tsx scripts/test-profiles.ts"
+    "test:profiles": "npx --yes tsx scripts/test-profiles.ts",
+    "test:storage": "npx --yes tsx scripts/test-storage-health.ts",
+    "test:conflict": "npx --yes tsx scripts/test-tab-conflict.ts"
   },
   "dependencies": {
     "@emailjs/browser": "^3.12.1",
