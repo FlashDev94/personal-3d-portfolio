@@ -171,6 +171,11 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [jsonText, setJsonText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Fresh storage diagnosis when the panel opens (boot GC is deferred)
+  useEffect(() => {
+    refreshStorageHealth();
+  }, [refreshStorageHealth]);
+
   /** Structural / heavy edits — one undo step each, available immediately. */
   const commit = useCallback(
     (
@@ -504,7 +509,8 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   (storageHealth.level === "warn" ||
                     storageHealth.level === "critical" ||
                     storageHealth.level === "full" ||
-                    storageHealth.orphanAssetCount > 0) && (
+                    storageHealth.orphanAssetCount > 0 ||
+                    storageHealth.orphanKeyCount > 0) && (
                     <div
                       className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
                         storageHealth.level === "full" ||

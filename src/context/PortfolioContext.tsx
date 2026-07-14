@@ -367,8 +367,22 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({
           setVersions(loadVersionHistory());
         }
       } else if (msg.type === "profile-switch") {
-        // Peer switched — update registry list; optional soft notice only
+        // Peer switched active profile — adopt content + URL so tabs stay aligned
         refreshProfiles();
+        if (msg.profileId && msg.profileId !== activeProfileIdRef.current) {
+          const reg = ensureProfileRegistry();
+          const profile = reg.profiles.find((p) => p.id === msg.profileId);
+          if (profile) {
+            setActiveProfileIdState(profile.id);
+            setIsPreviewMode(false);
+            setVersionHistoryProfileId(profile.id);
+            writeUrlProfile(profile.slug, false);
+            loadProfileIntoState(
+              profile.id,
+              `Switched in another tab to ${profile.label}`
+            );
+          }
+        }
       } else if (msg.type === "profiles") {
         refreshProfiles();
       } else if (msg.type === "storage-health") {
