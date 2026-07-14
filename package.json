@@ -10,7 +10,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "ts:check": "tsc --noEmit",
     "test:parser": "npx --yes tsx scripts/test-resume-parser.ts",
-    "test:history": "npx --yes tsx scripts/test-history.ts"
+    "test:history": "npx --yes tsx scripts/test-history.ts",
+    "test:profiles": "npx --yes tsx scripts/test-profiles.ts"
   },
   "dependencies": {
     "@emailjs/browser": "^3.12.1",

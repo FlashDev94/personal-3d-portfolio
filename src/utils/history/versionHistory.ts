@@ -6,6 +6,28 @@ import {
   type VersionEntry,
   type VersionStoreV1,
 } from "./types";
+import { profileVersionsKey } from "../profiles/types";
+import {
+  internPortfolioAssets,
+  resolvePortfolioAssets,
+} from "../profiles/assets";
+
+/** Active profile for version history ops (set by PortfolioProvider). */
+let activeProfileId: string | null = null;
+
+export function setVersionHistoryProfileId(profileId: string | null): void {
+  activeProfileId = profileId;
+}
+
+export function getVersionHistoryProfileId(): string | null {
+  return activeProfileId;
+}
+
+function versionsKey(): string {
+  return activeProfileId
+    ? profileVersionsKey(activeProfileId)
+    : VERSIONS_STORAGE_KEY;
+}
 
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -16,7 +38,7 @@ function newId(): string {
 
 function readStore(): VersionStoreV1 {
   try {
-    const raw = localStorage.getItem(VERSIONS_STORAGE_KEY);
+    const raw = localStorage.getItem(versionsKey());
     if (!raw) return { v: 1, entries: [] };
     const parsed = JSON.parse(raw) as VersionStoreV1;
     if (parsed?.v !== 1 || !Array.isArray(parsed.entries)) {
@@ -31,7 +53,7 @@ function readStore(): VersionStoreV1 {
           id: e.id,
           at: typeof e.at === "number" ? e.at : Date.now(),
           label: e.label || "Snapshot",
-          data,
+          data: resolvePortfolioAssets(data),
         } satisfies VersionEntry;
       })
       .filter(Boolean)
@@ -94,7 +116,7 @@ function writeStore(store: VersionStoreV1): boolean {
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
         localStorage.setItem(
-          VERSIONS_STORAGE_KEY,
+          versionsKey(),
           JSON.stringify({ v: 1, entries })
         );
         return true;
@@ -114,7 +136,7 @@ function writeStore(store: VersionStoreV1): boolean {
           ];
           try {
             localStorage.setItem(
-              VERSIONS_STORAGE_KEY,
+              versionsKey(),
               JSON.stringify({ v: 1, entries })
             );
             return true;
@@ -147,7 +169,7 @@ export function appendVersion(
   data: TPortfolioData,
   label: string
 ): AppendVersionResult {
-  let payload = clonePortfolio(data);
+  let payload = internPortfolioAssets(clonePortfolio(data));
   const jsonLen = JSON.stringify(payload).length;
   if (jsonLen > HISTORY_LIMITS.maxSnapshotChars) {
     payload = stripHeavyDataUrls(payload);
@@ -179,7 +201,7 @@ export function getVersion(id: string): VersionEntry | null {
 
 export function clearVersionHistory(): void {
   try {
-    localStorage.removeItem(VERSIONS_STORAGE_KEY);
+    localStorage.removeItem(versionsKey());
   } catch {
     /* ignore */
   }

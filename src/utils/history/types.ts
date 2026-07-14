@@ -41,9 +41,23 @@ export type SyncMessage =
       rev: number;
       fingerprint: string;
       label?: string;
+      /** Profile that was applied (multi-profile). */
+      profileId?: string;
     }
   | {
       type: "versions";
+      tabId: string;
+      rev: number;
+      profileId?: string;
+    }
+  | {
+      type: "profile-switch";
+      tabId: string;
+      rev: number;
+      profileId: string;
+    }
+  | {
+      type: "profiles";
       tabId: string;
       rev: number;
     };

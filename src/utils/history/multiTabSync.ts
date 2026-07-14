@@ -32,8 +32,6 @@ export function subscribePortfolioSync(listener: Listener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-    // Close the singleton when the last subscriber leaves so HMR / remounts
-    // do not keep a stale channel with zero listeners alive.
     if (listeners.size === 0 && channel) {
       try {
         channel.close();
@@ -46,19 +44,7 @@ export function subscribePortfolioSync(listener: Listener): () => void {
 }
 
 export function broadcastPortfolioSync(
-  message:
-    | {
-        type: "applied";
-        rev: number;
-        fingerprint: string;
-        label?: string;
-        tabId?: string;
-      }
-    | {
-        type: "versions";
-        rev: number;
-        tabId?: string;
-      }
+  message: Omit<SyncMessage, "tabId"> & { tabId?: string }
 ): void {
   const tabId = message.tabId ?? getTabId();
   const full = { ...message, tabId } as SyncMessage;
