@@ -37,6 +37,7 @@ import {
   portfolioFingerprint,
   type DraftCommitOptions,
 } from "../../utils/history";
+import { VersionComparePanel } from "./VersionComparePanel";
 
 const TABS: { id: ConfiguratorTab; label: string }[] = [
   { id: "upload", label: "Resume Upload" },
@@ -1799,6 +1800,19 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     </div>
 
                     <div className={sectionCard}>
+                      <VersionComparePanel
+                        versions={versions}
+                        live={data}
+                        draft={draft}
+                        onApplyToDraft={(next, label) => {
+                          commit(() => next, label);
+                        }}
+                        onStatus={setStatus}
+                        onError={setError}
+                      />
+                    </div>
+
+                    <div className={sectionCard}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <h3 className="font-semibold text-white">Applied version history</h3>
                         <button
@@ -1812,6 +1826,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                       <p className="text-sm text-secondary">
                         Snapshots are created when you Apply, import JSON, reset, or restore a
                         version. Shared across tabs via this browser&apos;s storage (newest last).
+                        Use Compare above to merge only selected fields (icons, 3D, copy) into the draft.
                       </p>
                       {versions.length === 0 ? (
                         <p className="text-sm text-secondary">
