@@ -1,7 +1,7 @@
 .about-section {
   display: flex;
   align-items: center;
-  justify-content: left;
+  justify-content: flex-start;
   place-items: center;
   position: relative;
   opacity: 1;
@@ -48,7 +48,7 @@
 @media only screen and (min-width: 1025px) {
   .about-section {
     width: var(--cWidth);
-    justify-content: right;
+    justify-content: flex-end;
     max-width: 1920px;
     height: var(--vh);
     padding: 0px;

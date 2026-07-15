@@ -93,7 +93,7 @@
       #14b8a6 20%,
       var(--accentColor) 50%,
       transparent 95%);
-  max-height: 0%;
+  max-height: 100%;
 }
 
 .career-dot {
@@ -237,8 +237,8 @@
     padding-top: 90px;
     margin-top: -70px;
 
-    align-items: start;
+    align-items: flex-start;
     place-items: inherit;
-    justify-content: left;
+    justify-content: flex-start;
   }
 }

@@ -5,8 +5,7 @@ import ErrorBoundary from "../layout/ErrorBoundary";
 const HeroScene = lazy(() => import("../canvas/HeroScene"));
 
 /**
- * Landing section matching akashrmalhotra/3d-portfolio DOM + CSS classes.
- * Content comes from PortfolioContext; structure matches Landing.tsx reference.
+ * Landing — Akash DOM classes. Inline 3D only when not character_stage (Option C).
  */
 const StoryLanding = ({ children }: PropsWithChildren) => {
   const { data } = usePortfolio();
@@ -19,10 +18,10 @@ const StoryLanding = ({ children }: PropsWithChildren) => {
 
   const lineA = config.hero.p[0] || services[0]?.title || "Full-stack";
   const lineB = config.hero.p[1] || services[1]?.title || "Product";
-
-  // Dual-role loop labels (short words work best with char stagger)
   const roleShortA = shortRole(lineA);
   const roleShortB = shortRole(lineB);
+
+  const useInlineHero = theme3d.heroScene !== "character_stage";
 
   return (
     <div className="landing-section" id="landingDiv">
@@ -52,14 +51,15 @@ const StoryLanding = ({ children }: PropsWithChildren) => {
         </div>
       </div>
 
-      {/* Inline hero packs only — character_stage mounts fixed at shell (C) */}
-      {theme3d.heroScene !== "character_stage" ? (
+      {useInlineHero ? (
         <div className="story-hero-stage character-model" aria-hidden>
           <ErrorBoundary
             name="Story hero canvas"
-            fallback={<div className="h-full w-full" aria-hidden />}
+            fallback={<div style={{ width: "100%", height: "100%" }} aria-hidden />}
           >
-            <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
+            <Suspense
+              fallback={<div style={{ width: "100%", height: "100%" }} aria-hidden />}
+            >
               <HeroScene />
             </Suspense>
           </ErrorBoundary>
@@ -71,8 +71,9 @@ const StoryLanding = ({ children }: PropsWithChildren) => {
 };
 
 function shortRole(s: string): string {
-  // Prefer first meaningful word, max ~14 chars for loop animation
-  const cleaned = s.replace(/I build|production-ready|applications/gi, "").trim();
+  const cleaned = s
+    .replace(/I build|production-ready|applications/gi, "")
+    .trim();
   const word = cleaned.split(/\s+/)[0] || s;
   return word.length > 16 ? word.slice(0, 14) : word;
 }

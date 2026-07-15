@@ -18,9 +18,7 @@ type StageProps = {
 };
 
 /**
- * Fixed lead-actor stage (desktop_pc as stand-in for encrypted character mesh).
- * Scroll progress is multi-segment like akashrmalhotra GsapScroll.setCharTimeline:
- *   landing → about → whatIDO, with mouse look on yaw/pitch.
+ * Fixed lead-actor stage. Camera + model only — never hides page content.
  */
 function StageModel({
   mouse,
@@ -33,23 +31,21 @@ function StageModel({
   const computer = useGLTF("./desktop_pc/scene.gltf");
   const { camera } = useThree();
 
-  // Camera keyframes: landing → about → what-i-do (progress 0..1)
   const keys = useMemo(
     () => ({
       pos: [
         new THREE.Vector3(0, 1.15, 13.5),
-        new THREE.Vector3(0.4, 2.1, 18),
-        new THREE.Vector3(0.2, 3.2, 26),
+        new THREE.Vector3(0.3, 1.8, 17),
+        new THREE.Vector3(0.15, 2.6, 22),
       ],
       look: [
         new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0.2, 0.4, 0),
-        new THREE.Vector3(0, 0.8, 0),
+        new THREE.Vector3(0.15, 0.3, 0),
+        new THREE.Vector3(0, 0.5, 0),
       ],
     }),
     []
   );
-
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
   const tmpLook = useMemo(() => new THREE.Vector3(), []);
 
@@ -59,22 +55,15 @@ function StageModel({
     const mx = mouse.current.x;
     const my = mouse.current.y;
 
-    // Two-segment lerp across 3 keys
     const seg = t < 0.5 ? 0 : 1;
     const local = t < 0.5 ? t * 2 : (t - 0.5) * 2;
-    const a = keys.pos[seg];
-    const b = keys.pos[seg + 1];
-    const la = keys.look[seg];
-    const lb = keys.look[seg + 1];
-    tmpPos.lerpVectors(a, b, local);
-    tmpLook.lerpVectors(la, lb, local);
-
+    tmpPos.lerpVectors(keys.pos[seg], keys.pos[seg + 1], local);
+    tmpLook.lerpVectors(keys.look[seg], keys.look[seg + 1], local);
     camera.position.lerp(tmpPos, 0.08);
     camera.lookAt(tmpLook);
 
-    // Model pose — yaw increases through scroll; mouse steers
-    const yaw = 0.12 + t * 0.85 + mx * 0.4;
-    const pitch = -0.04 + my * 0.14 + t * 0.1;
+    const yaw = 0.12 + t * 0.7 + mx * 0.35;
+    const pitch = -0.04 + my * 0.12 + t * 0.08;
     group.current.rotation.y = THREE.MathUtils.lerp(
       group.current.rotation.y,
       yaw,
@@ -85,33 +74,26 @@ function StageModel({
       pitch,
       0.08
     );
-
-    // Slide left through about (matches reference character-model x)
-    const targetX = t < 0.45 ? THREE.MathUtils.lerp(0, -1.4, t / 0.45) : -1.4;
-    const targetY =
-      t > 0.55
-        ? THREE.MathUtils.lerp(-2.15, -3.8, (t - 0.55) / 0.45)
-        : -2.15;
     group.current.position.x = THREE.MathUtils.lerp(
       group.current.position.x,
-      targetX,
+      t < 0.5 ? THREE.MathUtils.lerp(0, -1.1, t * 2) : -1.1,
       0.06
     );
     group.current.position.y = THREE.MathUtils.lerp(
       group.current.position.y,
-      targetY,
+      t > 0.6 ? THREE.MathUtils.lerp(-2.15, -3.2, (t - 0.6) / 0.4) : -2.15,
       0.06
     );
   });
 
   return (
-    <group ref={group} scale={0.7} position={[0, -2.15, 0]}>
-      <hemisphereLight intensity={0.2} groundColor="black" />
+    <group ref={group} scale={0.68} position={[0, -2.15, 0]}>
+      <hemisphereLight intensity={0.22} groundColor="black" />
       <spotLight
         position={[-16, 40, 12]}
         angle={0.14}
         penumbra={1}
-        intensity={1.15}
+        intensity={1.1}
         castShadow
         shadow-mapSize={1024}
       />
@@ -144,10 +126,9 @@ const CharacterStage = ({
     };
     window.addEventListener("mousemove", onMove, { passive: true });
 
-    const triggers: ScrollTrigger[] = [];
+    let st: ScrollTrigger | null = null;
     if (policy.allowScrub) {
-      // Map scroll from landing top → whatIDO bottom to 0..1
-      const st = ScrollTrigger.create({
+      st = ScrollTrigger.create({
         id: "character-stage-scroll",
         trigger: ".landing-section",
         start: "top top",
@@ -158,88 +139,11 @@ const CharacterStage = ({
           scroll.current = self.progress;
         },
       });
-      triggers.push(st);
-
-      // DOM transforms matching setCharTimeline content half
-      const tl1 = gsap.timeline({
-        scrollTrigger: {
-          trigger: ".landing-section",
-          start: "top top",
-          end: "bottom top",
-          scrub: true,
-          id: "char-tl-landing",
-          invalidateOnRefresh: true,
-        },
-      });
-      tl1
-        .fromTo(
-          ".character-model-fixed",
-          { x: "0%" },
-          { x: "-22%", duration: 1 },
-          0
-        )
-        .to(".landing-container", { opacity: 0, duration: 0.4 }, 0)
-        .to(".landing-container", { y: "40%", duration: 0.8 }, 0)
-        .fromTo(".about-me", { y: "-50%" }, { y: "0%" }, 0);
-
-      const tl2 = gsap.timeline({
-        scrollTrigger: {
-          trigger: ".about-section",
-          start: "center 55%",
-          end: "bottom top",
-          scrub: true,
-          id: "char-tl-about",
-          invalidateOnRefresh: true,
-        },
-      });
-      tl2
-        .to(".about-section", { y: "30%", duration: 6 }, 0)
-        .to(".about-section", { opacity: 0, delay: 3, duration: 2 }, 0)
-        .fromTo(
-          ".character-model-fixed",
-          { x: "-22%" },
-          { x: "-10%", delay: 2, duration: 5 },
-          0
-        )
-        .fromTo(
-          ".character-rim",
-          { opacity: 1, scaleX: 1.4 },
-          { opacity: 0, scale: 0, y: "-70%", duration: 5, delay: 2 },
-          0.3
-        )
-        .fromTo(
-          ".what-box-in",
-          { display: "none" },
-          { display: "flex", duration: 0.1, delay: 5.5 },
-          0
-        );
-
-      const tl3 = gsap.timeline({
-        scrollTrigger: {
-          trigger: ".whatIDO",
-          start: "top top",
-          end: "bottom top",
-          scrub: true,
-          id: "char-tl-what",
-          invalidateOnRefresh: true,
-        },
-      });
-      tl3
-        .fromTo(
-          ".character-model-fixed",
-          { y: "0%" },
-          { y: "-100%", duration: 4, ease: "none", delay: 1 },
-          0
-        )
-        .fromTo(".whatIDO", { y: 0 }, { y: "15%", duration: 2 }, 0);
     }
 
     return () => {
       window.removeEventListener("mousemove", onMove);
-      triggers.forEach((t) => t.kill());
-      ScrollTrigger.getAll()
-        .filter((t) => String(t.vars?.id || "").startsWith("char-tl-"))
-        .forEach((t) => t.kill());
+      st?.kill();
     };
   }, [policy.allowWebGL, policy.isDesktop, policy.allowScrub]);
 
@@ -249,7 +153,7 @@ const CharacterStage = ({
 
   return (
     <div
-      className="character-model-fixed character-stage pointer-events-none fixed inset-0 z-[5] hidden lg:block"
+      className="character-model-fixed character-stage pointer-events-none fixed inset-0 z-[1] hidden lg:block"
       aria-hidden
     >
       <ErrorBoundary
@@ -272,7 +176,13 @@ const CharacterStage = ({
           </Suspense>
         </Canvas>
       </ErrorBoundary>
-      <div className="character-rim pointer-events-none absolute bottom-[8%] left-1/2 h-24 w-[55%] -translate-x-1/2 rounded-[100%] bg-[radial-gradient(ellipse_at_center,var(--accentColor,#5eead4)_0%,transparent_70%)] opacity-60 blur-2xl" />
+      <div
+        className="character-rim pointer-events-none absolute bottom-[6%] left-1/2 h-20 w-[50%] -translate-x-1/2 rounded-[100%] opacity-50 blur-2xl"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, var(--accentColor, #5eead4) 0%, transparent 70%)",
+        }}
+      />
     </div>
   );
 };

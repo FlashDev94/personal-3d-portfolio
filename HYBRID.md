@@ -1,23 +1,19 @@
-# Hybrid Option C — Character-led scroll stage
+# Hybrid Option C — Character-led stage (stable)
 
-**Branch:** `feat/hybrid-c-character-led`  
-**Builds on:** Option B (full Akash skin + scroll story)
+**Branch:** `feat/hybrid-c-character-led`
 
-## What this is (distinct from A and B)
+## Distinct from B
+| | B | C |
+|--|---|---|
+| 3D | Inline hero in landing (`desktop_pc` / packs) | **Fixed** full-viewport stage, mouse look + scroll camera |
+| Default scene | `desktop_pc` | `character_stage` |
+| Content hide-on-scroll | No (soft parallax only) | No (camera only) |
 
-Same **Akash skin/DOM** as B, plus a **fixed lead-actor 3D stage** driven by scroll — the missing core of the reference’s `Character` + `GsapScroll.setCharTimeline`:
-
-| Feature | B | C |
-|---------|---|---|
-| Akash CSS skin + section DOM | ✅ | ✅ |
-| Intro FX + career scrub | ✅ | ✅ |
-| Fixed `position:fixed` stage outside scroll content | ❌ | ✅ |
-| Mouse look (yaw/pitch) | ❌ | ✅ |
-| Multi-section camera path (landing → about → whatIDO) | ❌ | ✅ |
-| DOM stage slide/exit (`.character-model-fixed`, rim fade) | ❌ | ✅ |
-| Encrypted personal mesh | never | never (uses your `desktop_pc`) |
-
-Default `theme3d.heroScene = "character_stage"`. Switch back to `desktop_pc` / packs in Customize if you want the classic hero.
+## Stability rules (both B/C)
+- Content is **always visible** — GSAP enhances, never gates (`display:none` / opacity traps removed)
+- Skin CSS scoped under `.skin-akash` / `html.skin-akash-active`
+- Standard flex values (`flex-end` not `end`) for Vite CSS warnings
+- Configurator + multi-profile platform preserved
 
 ## Run
 ```bash
@@ -25,8 +21,3 @@ git checkout feat/hybrid-c-character-led
 npm install
 npm run dev
 ```
-
-Desktop-only stage (touch / narrow / e2e / reduced-motion kill-switches via `motionRuntime`).
-
-## Platform preserved
-Configurator, multi-profile, history, multi-tab recovery.
