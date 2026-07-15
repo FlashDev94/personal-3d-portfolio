@@ -127,9 +127,9 @@ html.skin-akash-active body {
   overflow: hidden;
 }
 
+/* contact padding/layout owned by Contact.css — only z-index here */
 .skin-akash .contact-section {
   z-index: 2;
-  padding: 4rem 0 6rem;
 }
 
 .skin-akash .section-container {
@@ -168,85 +168,6 @@ html.skin-akash-active body {
 }
 
 /* Contact form */
-.skin-akash .akash-contact-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 24px;
-  max-width: 420px;
-}
-.skin-akash .akash-contact-form input,
-.skin-akash .akash-contact-form textarea {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  padding: 12px 14px;
-  color: #eae5ec;
-  font: inherit;
-}
-.skin-akash .akash-contact-form button[type="submit"] {
-  align-self: flex-start;
-  background: var(--accentColor);
-  color: #042f2e;
-  border: none;
-  border-radius: 999px;
-  padding: 12px 22px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-/* Tech marquee — flow layout, not absolute over empty space */
-.skin-akash .techstack-marquee {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  overflow: hidden;
-  width: 100%;
-  padding: 1rem 0 2rem;
-}
-.skin-akash .techstack-row {
-  display: flex;
-  width: max-content;
-  gap: 1.25rem;
-  animation: tech-marquee 40s linear infinite;
-}
-.skin-akash .techstack-row.reverse {
-  animation-direction: reverse;
-}
-.skin-akash .techstack-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  width: 7rem;
-  height: 5.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 1rem;
-  background: rgba(10, 14, 23, 0.75);
-  backdrop-filter: blur(8px);
-  flex-shrink: 0;
-}
-.skin-akash .techstack-chip img {
-  width: 2rem;
-  height: 2rem;
-  object-fit: contain;
-}
-.skin-akash .techstack-chip span {
-  font-size: 0.65rem;
-  opacity: 0.75;
-  max-width: 6rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-@keyframes tech-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
 /* Carousel: prevent overflow chaos on small screens */
 .skin-akash .carousel-content {
   flex-wrap: wrap;
@@ -275,9 +196,103 @@ html.skin-akash-active body {
 
 /* Prefer reduced motion: stop marquees */
 @media (prefers-reduced-motion: reduce) {
-  .skin-akash .techstack-row,
   .skin-akash .landing-circle1,
   .skin-akash .landing-circle2 {
     animation: none !important;
+  }
+}
+
+
+/* Techstack — unique skill grid (no marquee / no 4× duplication) */
+.skin-akash .techstack {
+  width: 100%;
+  position: relative;
+  overflow: visible;
+  min-height: 0;
+  height: auto;
+  margin: 40px auto 20px;
+  padding: 48px 0 72px;
+  z-index: 2;
+}
+
+.skin-akash .techstack > h2 {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 100%;
+  font-size: clamp(1.75rem, 5vw, 3.5rem);
+  text-align: center;
+  font-weight: 400;
+  text-transform: uppercase;
+  margin: 0 0 2.5rem;
+  letter-spacing: 0.04em;
+  z-index: 2;
+}
+
+/* Kill any leftover marquee rules from older hybrid builds */
+.skin-akash .techstack-marquee,
+.skin-akash .techstack-row {
+  display: none !important;
+  animation: none !important;
+}
+
+.skin-akash .techstack-grid {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  width: min(var(--cWidth, 94%), 960px);
+  display: grid;
+  /* Fixed min column so chips stay equal; center the whole grid */
+  grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr));
+  gap: 1rem;
+  justify-items: stretch;
+  align-items: stretch;
+}
+
+.skin-akash .techstack-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 5.75rem;
+  padding: 0.85rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(10, 14, 23, 0.72);
+  backdrop-filter: blur(8px);
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.skin-akash .techstack-chip:hover {
+  border-color: var(--accentColor, #5eead4);
+  transform: translateY(-2px);
+}
+
+.skin-akash .techstack-chip img {
+  width: 2.1rem;
+  height: 2.1rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.skin-akash .techstack-chip span {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  padding: 0 0.2rem;
+  line-height: 1.2;
+}
+
+@media (max-width: 600px) {
+  .skin-akash .techstack-grid {
+    grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+    gap: 0.75rem;
   }
 }

@@ -1,38 +1,37 @@
+import { useMemo } from "react";
 import { usePortfolio } from "../../context/PortfolioContext";
 
 /**
- * Tech section shell matches reference .techstack layout.
- * Uses CSS marquee instead of rapier physics balls (keeps deps light / robust).
+ * Skills / techstack — each technology shown once in a responsive grid.
+ * (Previous marquee duplicated the list 2× per row × 2 rows = 4× repetition.)
  */
 const StoryTech = () => {
   const { data } = usePortfolio();
-  const { technologies } = data;
+
+  const technologies = useMemo(() => {
+    const seen = new Set<string>();
+    return data.technologies.filter((t) => {
+      const key = (t.name || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [data.technologies]);
+
   if (!technologies.length) return null;
 
-  const row = [...technologies, ...technologies];
-
   return (
-    <div className="techstack" id="tech">
-      <h2>My Techstack</h2>
-      <div className="techstack-marquee" aria-hidden={false}>
-        <div className="techstack-row">
-          {row.map((t, i) => (
-            <div className="techstack-chip" key={`${t.name}-a-${i}`} title={t.name}>
-              <img src={t.icon} alt="" loading="lazy" draggable={false} />
-              <span>{t.name}</span>
-            </div>
-          ))}
-        </div>
-        <div className="techstack-row reverse">
-          {row.map((t, i) => (
-            <div className="techstack-chip" key={`${t.name}-b-${i}`} title={t.name}>
-              <img src={t.icon} alt="" loading="lazy" draggable={false} />
-              <span>{t.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <section className="techstack" id="tech" aria-labelledby="techstack-heading">
+      <h2 id="techstack-heading">My Techstack</h2>
+      <ul className="techstack-grid">
+        {technologies.map((t) => (
+          <li className="techstack-chip" key={t.name} title={t.name}>
+            <img src={t.icon} alt="" loading="lazy" draggable={false} />
+            <span>{t.name}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 };
 
