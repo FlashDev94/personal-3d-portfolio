@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   VerticalTimeline,
   VerticalTimelineElement,
@@ -11,6 +11,7 @@ import { Header } from "../atoms/Header";
 import { TExperience } from "../../types";
 import { usePortfolio } from "../../context/PortfolioContext";
 import { cleanCompanyDisplayName } from "../../utils/icons";
+import { useSectionScrub } from "../../hooks/useSectionScrub";
 
 const ExperienceCard: React.FC<TExperience> = (experience) => {
   const company = cleanCompanyDisplayName(experience.companyName);
@@ -81,12 +82,14 @@ const ExperienceCard: React.FC<TExperience> = (experience) => {
 const Experience = () => {
   const { data } = usePortfolio();
   const { config, experiences } = data;
+  const scrubRef = useRef<HTMLDivElement>(null);
+  useSectionScrub(scrubRef, { itemSelector: "[data-scrub-item]" });
 
   return (
     <>
       <Header useMotion={true} {...config.sections.experience} />
 
-      <div className="mt-20 flex flex-col">
+      <div className="mt-20 flex flex-col" ref={scrubRef}>
         {experiences.length === 0 ? (
           <p className="text-secondary text-center text-[16px]">
             No experience added yet. Open Customize to add roles or upload a resume.
@@ -94,7 +97,9 @@ const Experience = () => {
         ) : (
           <VerticalTimeline>
             {experiences.map((experience, index) => (
-              <ExperienceCard key={index} {...experience} />
+              <div key={index} data-scrub-item>
+                <ExperienceCard {...experience} />
+              </div>
             ))}
           </VerticalTimeline>
         )}

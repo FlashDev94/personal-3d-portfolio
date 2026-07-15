@@ -11,6 +11,8 @@ import ErrorBoundary from "./components/layout/ErrorBoundary";
 import BootScreen from "./components/layout/BootScreen";
 import herobg from "./assets/herobg.png";
 import { useThemeRuntime } from "./utils/themeRuntime";
+import CustomCursor from "./components/motion/CustomCursor";
+import SmoothScroll from "./components/motion/SmoothScroll";
 
 /** Below-the-fold sections — split out of the critical path. */
 const About = lazy(() => import("./components/sections/About"));
@@ -113,57 +115,60 @@ const PortfolioShell = () => {
       )}
 
       <BrowserRouter>
-        <div
-          className={`bg-primary relative z-0 min-h-screen transition-opacity duration-500 ${
-            bootDone ? "opacity-100" : "opacity-0"
-          }`}
-          aria-hidden={!bootDone}
-        >
+        <CustomCursor />
+        <SmoothScroll enabled={bootDone}>
           <div
-            className="relative bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: `url(${herobg})` }}
+            className={`bg-primary relative z-0 min-h-screen transition-opacity duration-500 ${
+              bootDone ? "opacity-100" : "opacity-0"
+            }`}
+            aria-hidden={!bootDone}
           >
-            {/* Light mode wash softens the dark hero art */}
             <div
-              className="pointer-events-none absolute inset-0 z-[1]"
-              style={{ background: "var(--color-hero-wash)" }}
-              aria-hidden
-            />
-            <div className="relative z-[2]">
-              <Navbar />
-              <Hero />
+              className="relative bg-cover bg-center bg-no-repeat"
+              style={{ backgroundImage: `url(${herobg})` }}
+            >
+              {/* Light mode wash softens the dark hero art */}
+              <div
+                className="pointer-events-none absolute inset-0 z-[1]"
+                style={{ background: "var(--color-hero-wash)" }}
+                aria-hidden
+              />
+              <div className="relative z-[2]">
+                <Navbar />
+                <Hero />
+              </div>
             </div>
-          </div>
 
-          <Suspense fallback={<SectionFallback />}>
-            <About />
-          </Suspense>
-          <Suspense fallback={<SectionFallback />}>
-            <Experience />
-          </Suspense>
-          <Suspense fallback={<SectionFallback />}>
-            <Tech />
-          </Suspense>
-          <Suspense fallback={<SectionFallback />}>
-            <Works />
-          </Suspense>
-          {data.testimonials.length > 0 && (
             <Suspense fallback={<SectionFallback />}>
-              <Feedbacks />
+              <About />
             </Suspense>
-          )}
-          <div className="relative z-0">
             <Suspense fallback={<SectionFallback />}>
-              <Contact />
+              <Experience />
             </Suspense>
-            <StarsLayer active={bootDone} />
+            <Suspense fallback={<SectionFallback />}>
+              <Tech />
+            </Suspense>
+            <Suspense fallback={<SectionFallback />}>
+              <Works />
+            </Suspense>
+            {data.testimonials.length > 0 && (
+              <Suspense fallback={<SectionFallback />}>
+                <Feedbacks />
+              </Suspense>
+            )}
+            <div className="relative z-0">
+              <Suspense fallback={<SectionFallback />}>
+                <Contact />
+              </Suspense>
+              <StarsLayer active={bootDone} />
+            </div>
+            {bootDone && (
+              <Suspense fallback={null}>
+                <PortfolioConfigurator />
+              </Suspense>
+            )}
           </div>
-          {bootDone && (
-            <Suspense fallback={null}>
-              <PortfolioConfigurator />
-            </Suspense>
-          )}
-        </div>
+        </SmoothScroll>
       </BrowserRouter>
     </>
   );

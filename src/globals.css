@@ -771,3 +771,78 @@ html[data-mode="light"] .hero-accent-line {
     animation: none !important;
   }
 }
+
+/* ── Hybrid motion (Option A) ───────────────────────────────── */
+.has-custom-cursor,
+.has-custom-cursor * {
+  cursor: none !important;
+}
+
+.custom-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: difference;
+  transition: width 0.2s ease, height 0.2s ease, margin 0.2s ease,
+    background 0.2s ease, opacity 0.2s ease;
+}
+
+.custom-cursor.cursor-disable {
+  opacity: 0;
+}
+
+.custom-cursor.cursor-icons {
+  width: var(--cursorW, 40px);
+  height: var(--cursorH, 40px);
+  margin: calc(var(--cursorH, 40px) / -2) 0 0 calc(var(--cursorW, 40px) / -2);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.hover-link {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  line-height: 1.2;
+}
+
+.hover-in {
+  display: block;
+  position: relative;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hover-dup {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  color: var(--accent);
+}
+
+.hover-link:hover .hover-in {
+  transform: translateY(-100%);
+}
+
+.split-char {
+  backface-visibility: hidden;
+}
+
+#smooth-wrapper.smooth-wrapper-active {
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Configurator always above motion chrome */
+[data-configurator-root],
+.portfolio-configurator-root {
+  z-index: 10000;
+}

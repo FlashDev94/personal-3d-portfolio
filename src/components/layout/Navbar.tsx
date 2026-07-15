@@ -7,6 +7,7 @@ import { usePortfolio, useTheme3d } from "../../context/PortfolioContext";
 import { clampTheme3d, resolveThemeTokens } from "../../constants/theme3d";
 import { applyPaletteToDocument } from "../../utils/themeRuntime";
 import { ProfileSwitcher } from "../ProfileSwitcher";
+import HoverLinks from "../motion/HoverLinks";
 
 const Navbar = () => {
   const { data } = usePortfolio();
@@ -101,9 +102,11 @@ const Navbar = () => {
                 key={nav.id}
                 className={`${
                   active === nav.id ? "text-fg" : "text-secondary"
-                } hover:text-fg cursor-pointer text-[18px] font-medium`}
+                } hover:text-fg cursor-pointer text-[18px] font-medium uppercase tracking-wide`}
               >
-                <a href={`#${nav.id}`}>{nav.title}</a>
+                <a href={`#${nav.id}`} data-cursor="disable">
+                  <HoverLinks text={nav.title} />
+                </a>
               </li>
             ))}
           </ul>
