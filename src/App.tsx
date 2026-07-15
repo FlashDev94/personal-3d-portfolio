@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState, memo } from "react";
 import { BrowserRouter } from "react-router-dom";
 
-import { Hero, Navbar } from "./components";
+import { Navbar } from "./components";
 import {
   PortfolioProvider,
   usePortfolio,
@@ -9,16 +9,19 @@ import {
 } from "./context/PortfolioContext";
 import ErrorBoundary from "./components/layout/ErrorBoundary";
 import BootScreen from "./components/layout/BootScreen";
-import herobg from "./assets/herobg.png";
 import { useThemeRuntime } from "./utils/themeRuntime";
 import CustomCursor from "./components/motion/CustomCursor";
 import SmoothScroll from "./components/motion/SmoothScroll";
+import StoryLanding from "./components/story/StoryLanding";
+import SocialRail from "./components/story/SocialRail";
+import { useStoryScroll } from "./hooks/useStoryScroll";
 
-/** Below-the-fold sections — split out of the critical path. */
-const About = lazy(() => import("./components/sections/About"));
-const Experience = lazy(() => import("./components/sections/Experience"));
-const Tech = lazy(() => import("./components/sections/Tech"));
-const Works = lazy(() => import("./components/sections/Works"));
+/** Below-the-fold story sections — split out of the critical path. */
+const StoryAbout = lazy(() => import("./components/story/StoryAbout"));
+const StoryWhatIDo = lazy(() => import("./components/story/StoryWhatIDo"));
+const StoryCareer = lazy(() => import("./components/story/StoryCareer"));
+const StoryWork = lazy(() => import("./components/story/StoryWork"));
+const StoryTech = lazy(() => import("./components/story/StoryTech"));
 const Feedbacks = lazy(() => import("./components/sections/Feedbacks"));
 const Contact = lazy(() => import("./components/sections/Contact"));
 const StarsCanvas = lazy(() => import("./components/canvas/Stars"));
@@ -99,6 +102,7 @@ const PortfolioShell = () => {
   const [bootDone, setBootDone] = useState(false);
 
   const onBootFinished = useCallback(() => setBootDone(true), []);
+  useStoryScroll(bootDone);
 
   // Absolute fail-safe: never leave the portfolio invisible if boot hangs
   useEffect(() => {
@@ -109,47 +113,37 @@ const PortfolioShell = () => {
 
   return (
     <>
-      {/* Unmount after boot so theme toggles do not keep re-rendering the overlay island */}
       {!bootDone && (
         <BootScreenBridge ready={isHydrated} onFinished={onBootFinished} />
       )}
 
       <BrowserRouter>
         <CustomCursor />
+        <SocialRail />
         <SmoothScroll enabled={bootDone}>
           <div
-            className={`bg-primary relative z-0 min-h-screen transition-opacity duration-500 ${
+            className={`bg-primary story-shell relative z-0 min-h-screen transition-opacity duration-500 ${
               bootDone ? "opacity-100" : "opacity-0"
             }`}
             aria-hidden={!bootDone}
           >
-            <div
-              className="relative bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: `url(${herobg})` }}
-            >
-              {/* Light mode wash softens the dark hero art */}
-              <div
-                className="pointer-events-none absolute inset-0 z-[1]"
-                style={{ background: "var(--color-hero-wash)" }}
-                aria-hidden
-              />
-              <div className="relative z-[2]">
-                <Navbar />
-                <Hero />
-              </div>
-            </div>
+            <Navbar />
+            <StoryLanding />
 
             <Suspense fallback={<SectionFallback />}>
-              <About />
+              <StoryAbout />
             </Suspense>
             <Suspense fallback={<SectionFallback />}>
-              <Experience />
+              <StoryWhatIDo />
             </Suspense>
             <Suspense fallback={<SectionFallback />}>
-              <Tech />
+              <StoryCareer />
             </Suspense>
             <Suspense fallback={<SectionFallback />}>
-              <Works />
+              <StoryWork />
+            </Suspense>
+            <Suspense fallback={<SectionFallback />}>
+              <StoryTech />
             </Suspense>
             {data.testimonials.length > 0 && (
               <Suspense fallback={<SectionFallback />}>

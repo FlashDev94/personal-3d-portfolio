@@ -1,39 +1,42 @@
-# Hybrid Option A — Motion polish
+# Hybrid Option B — Scroll story flow
 
-**Branch:** `feat/hybrid-a-motion-polish`
+**Branch:** `feat/hybrid-b-scroll-story`  
+**Builds on:** Option A motion polish
 
 ## Idea
-Keep your existing section order and platform (configurator, multi-profile, history).
-Borrow animation *feel* from [akashrmalhotra/3d-portfolio](https://github.com/akashrmalhotra/3d-portfolio):
+Restructure the **public page narrative** closer to [akashrmalhotra/3d-portfolio](https://github.com/akashrmalhotra/3d-portfolio) while keeping your data platform:
 
-- GSAP hero char-stagger intro (DOM split — no Club SplitText required)
-- Custom magnetic cursor (desktop only)
-- Navbar HoverLinks letter stack
-- Scroll scrub on experience cards
-- Optional ScrollSmoother when the GSAP build includes it (else native scroll)
-- Work **carousel** (default) with toggle back to holo grid
+1. **Landing** — large name, dual-role loop, hero 3D stage
+2. **About** — compact glass card
+3. **What I Do** — services grid (dashed borders)
+4. **Career** — scrub-growing timeline from Experience data
+5. **Work** — project carousel
+6. **Tech** — infinite marquee of skills
+7. **Contact** — existing form + stars
+
+All copy/media still comes from `PortfolioContext` / configurator.
 
 ## Run
 ```bash
-git checkout feat/hybrid-a-motion-polish
+git checkout feat/hybrid-b-scroll-story
 npm install
 npm run dev
 ```
 
-## Kill-switches (robustness)
-| Signal | Effect |
-|--------|--------|
-| `?e2e=1` / session `portfolio-e2e` | No cursor, scrub, smoother, WebGL |
-| `prefers-reduced-motion` | Same as e2e for motion FX |
-| Touch / coarse pointer | No custom cursor; no smoother |
-| Width ≤ 1024 | Treated as non-desktop for smoother/cursor |
+## Kill-switches
+Same as Option A (`motionRuntime`): e2e, reduced-motion, touch → no cursor / scrub / smoother / heavy FX.
 
-Policy lives in `src/utils/motionRuntime.ts`.
-
-## What stayed
-- PortfolioContext, configurator, multi-tab conflict recovery, storage health
-- Theme packs, boot screen, tests
+## Platform preserved
+Configurator FAB, multi-profile, history, multi-tab conflict recovery, theme packs.
 
 ## Known gaps
-- ScrollSmoother only if available in installed `gsap` (graceful no-op otherwise)
-- Not a full page-flow redesign (see Option B)
+- Feedbacks section still uses original layout when testimonials exist
+- No fixed “character bone” timeline (see Option C)
+- Nav hash ids: `about`, `work` (career), `projects`, `tech` — ensure navLinks match your data
+
+## Compare
+| | A | B |
+|--|---|---|
+| Section order | Original | Story narrative |
+| Motion | Polish on classic layout | Scrub storytelling + landing loop |
+| 3D lead actor | Scene packs only | Scene packs only (scroll-shifted) |
