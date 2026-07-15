@@ -4,20 +4,18 @@ type Props = {
   disableCursor?: boolean;
 };
 
-/** Letter-stack hover effect inspired by akashrmalhotra/3d-portfolio. */
+/** Letter-stack hover effect — akashrmalhotra/3d-portfolio structure. */
 const HoverLinks = ({ text, disableCursor = true }: Props) => {
   return (
-    <span
+    <div
       className="hover-link"
       data-cursor={disableCursor ? "disable" : undefined}
     >
-      <span className="hover-in">
-        {text}
-        <span className="hover-dup" aria-hidden>
-          {text}
-        </span>
-      </span>
-    </span>
+      <div className="hover-in">
+        {text}{" "}
+        <div aria-hidden>{text}</div>
+      </div>
+    </div>
   );
 };
 

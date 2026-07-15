@@ -1,0 +1,132 @@
+/* Keep configurator / platform UI usable above the skin */
+.skin-akash .portfolio-configurator-root,
+.skin-akash [data-configurator-root] {
+  font-family: "Poppins", system-ui, sans-serif;
+  z-index: 10050 !important;
+}
+
+html.skin-akash-active,
+html.skin-akash-active body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--color-primary, #0a0e17);
+}
+
+.skin-akash button[aria-label="Customize portfolio"] {
+  z-index: 10040 !important;
+}
+
+/* Soften reference user-select:none for accessibility of form fields */
+.skin-akash input,
+.skin-akash textarea,
+.skin-akash button,
+.skin-akash a {
+  user-select: text;
+}
+
+/* Contact form bridge into skin */
+.skin-akash .akash-contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+  max-width: 420px;
+}
+.skin-akash .akash-contact-form input,
+.skin-akash .akash-contact-form textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #eae5ec;
+  font: inherit;
+}
+.skin-akash .akash-contact-form button[type="submit"] {
+  align-self: flex-start;
+  background: var(--accentColor);
+  color: #042f2e;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 22px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Hero 3D stage sits inside landing like reference character-model */
+.skin-akash .character-model,
+.skin-akash .story-hero-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.skin-akash .story-hero-stage canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Tech marquee fallback (no rapier balls) */
+.skin-akash .techstack-marquee {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rem;
+  overflow: hidden;
+  padding-top: 180px;
+}
+.skin-akash .techstack-row {
+  display: flex;
+  width: max-content;
+  gap: 1.5rem;
+  animation: tech-marquee 40s linear infinite;
+}
+.skin-akash .techstack-row.reverse {
+  animation-direction: reverse;
+}
+.skin-akash .techstack-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 7.5rem;
+  height: 6rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: rgba(10, 14, 23, 0.7);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+.skin-akash .techstack-chip img {
+  width: 2.25rem;
+  height: 2.25rem;
+  object-fit: contain;
+}
+.skin-akash .techstack-chip span {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes tech-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Don't let Tailwind story utilities fight skin sections */
+.skin-akash .section-container {
+  width: var(--cWidth);
+  max-width: var(--cMaxWidth);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Profile switcher / platform chrome */
+.skin-akash [data-profile-switcher] {
+  z-index: 10030 !important;
+}

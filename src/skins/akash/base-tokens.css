@@ -1,0 +1,19 @@
+/* Bridge: our theme tokens → Akash CSS variables when skin is active */
+.skin-akash {
+  --accentColor: var(--accent, #5eead4);
+  --backgroundColor: var(--color-primary, #0a0e17);
+  --cWidth: min(100% - 30px, 1920px);
+  --cMaxWidth: 1920px;
+  --vh: 100svh;
+  color: #eae5ec;
+  font-family: "Geist", "Poppins", system-ui, sans-serif;
+  background-color: var(--backgroundColor);
+}
+
+.skin-akash a {
+  color: inherit;
+  text-decoration: none;
+}
+.skin-akash a:hover {
+  color: var(--accentColor);
+}

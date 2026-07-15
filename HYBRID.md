@@ -1,18 +1,24 @@
-# Hybrid Option B — Scroll story flow
+# Hybrid Option B — Akash scroll-story skin
 
 **Branch:** `feat/hybrid-b-scroll-story`  
-**Builds on:** Option A motion polish
+**Builds on:** Option A motion polish (`motionRuntime`, cursor, HoverLinks, SmoothScroll)
 
-## Idea
-Restructure the **public page narrative** closer to [akashrmalhotra/3d-portfolio](https://github.com/akashrmalhotra/3d-portfolio) while keeping your data platform:
+## What this is (distinct from A and C)
 
-1. **Landing** — large name, dual-role loop, hero 3D stage
-2. **About** — compact glass card
-3. **What I Do** — services grid (dashed borders)
-4. **Career** — scrub-growing timeline from Experience data
-5. **Work** — project carousel
-6. **Tech** — infinite marquee of skills
-7. **Contact** — existing form + stars
+Faithful **visual + structural port** of [akashrmalhotra/3d-portfolio](https://github.com/akashrmalhotra/3d-portfolio):
+
+| Reference piece | Our implementation |
+|-----------------|-------------------|
+| Geist + cyan tokens, section CSS | `src/skins/akash/*` (Landing, WhatIDo, Career, Work, Contact, Navbar, Social…) |
+| Landing dual-line role loop | `StoryLanding` + `useAkashIntro` (SplitText-free char stagger) |
+| What I Do dashed cards | `StoryWhatIDo` exact DOM (`.whatIDO`, `.what-content`, SVG borders) |
+| Career scrub timeline | `StoryCareer` + `useStoryScroll` (`setAllTimeline` port) |
+| Work carousel | `StoryWork` (`.carousel-*` classes, react-icons arrows) |
+| Social rail + header | `SocialRail`, `StoryNavbar` |
+| Contact footer grid | `StoryContact` |
+| ScrollSmoother | `SmoothScroll` (graceful fallback) |
+| Fixed character bone timeline | **Not on B** — see Option C |
+| Encrypted character mesh | **Never shipped** (policy) |
 
 All copy/media still comes from `PortfolioContext` / configurator.
 
@@ -24,19 +30,14 @@ npm run dev
 ```
 
 ## Kill-switches
-Same as Option A (`motionRuntime`): e2e, reduced-motion, touch → no cursor / scrub / smoother / heavy FX.
+`motionRuntime`: e2e, reduced-motion, touch → no cursor / scrub / smoother / heavy FX.
 
 ## Platform preserved
 Configurator FAB, multi-profile, history, multi-tab conflict recovery, theme packs.
 
-## Known gaps
-- Feedbacks section still uses original layout when testimonials exist
-- No fixed “character bone” timeline (see Option C)
-- Nav hash ids: `about`, `work` (career), `projects`, `tech` — ensure navLinks match your data
-
 ## Compare
-| | A | B |
-|--|---|---|
-| Section order | Original | Story narrative |
-| Motion | Polish on classic layout | Scrub storytelling + landing loop |
-| 3D lead actor | Scene packs only | Scene packs only (scroll-shifted) |
+| | A | B | C |
+|--|---|---|---|
+| Layout | Original Tailwind sections | **Akash CSS + DOM** | Akash + character stage |
+| Motion | Polish on classic layout | Scrub storytelling (content) | Scrub + camera/look-at bone |
+| Skin | Tailwind tokens | Geist/cyan skin | Same skin as B + 3D lead |
