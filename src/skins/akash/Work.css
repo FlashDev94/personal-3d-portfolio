@@ -329,3 +329,29 @@
     max-height: 250px;
   }
 }
+
+/* hybrid responsive — keep carousel usable */
+@media screen and (max-width: 900px) {
+  .work-section h2 {
+    font-size: clamp(2rem, 8vw, 48px);
+  }
+  .carousel-content {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .carousel-info {
+    width: 100%;
+  }
+  .carousel-image-wrapper {
+    width: 100%;
+  }
+  .carousel-slide {
+    padding: 28px 0;
+  }
+  .carousel-number h3 {
+    font-size: 40px;
+  }
+  .carousel-details h4 {
+    font-size: 22px;
+  }
+}

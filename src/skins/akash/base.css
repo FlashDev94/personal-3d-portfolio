@@ -1,132 +1,106 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap");
 
-html.skin-akash-active, .skin-akash {
-  font-family: "Geist", sans-serif;
-
+/* Skin tokens only — do not reset the whole app document */
+html.skin-akash-active,
+.skin-akash {
+  --accentColor: var(--accent, #5eead4);
+  --backgroundColor: var(--color-primary, #0a0e17);
+  --cWidth: calc(100% - 30px);
+  --cMaxWidth: 1920px;
+  --vh: 100svh;
+  font-family: "Geist", "Poppins", system-ui, sans-serif;
   font-optical-sizing: auto;
-  font-style: normal;
-  line-height: 1.5;
-  scroll-behavior: smooth;
-  color-scheme: light dark;
   color: #eae5ec;
   background-color: var(--backgroundColor);
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --accentColor: #5eead4;
-  --backgroundColor: #0a0e17;
-  --vh: 100vh;
-  --vh: 100svh;
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: "Geist", sans-serif;
-}
-
-
-a {
-  color: inherit;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: var(--accentColor);
-}
-
-main {
-  opacity: 1;
-  transition: 0.3s;
-}
-
-.main-active {
-  opacity: 0;
-  animation: fadeIn 1s 1;
-  animation-fill-mode: forwards;
-}
-
-@keyframes fadeIn {
-  100% {
-    opacity: 1;
-  }
 }
 
 html.skin-akash-active body {
   margin: 0;
-  height: auto;
-  background-color: #050810;
-  flex-grow: 1;
-  --cWidth: calc(100% - 30px);
-  --cMaxWidth: 1920px;
+  min-height: 100%;
+  background-color: var(--backgroundColor, #0a0e17);
+  max-width: 100vw;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.skin-akash h1,
+.skin-akash h2,
+.skin-akash h3,
+.skin-akash h4,
+.skin-akash h5,
+.skin-akash h6 {
+  font-family: "Geist", "Poppins", system-ui, sans-serif;
+}
+
+.skin-akash a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.skin-akash a:hover {
+  color: var(--accentColor);
+}
+
+/* Visible by default — no opacity:0 trap on boot */
+.skin-akash main,
+.skin-akash .container-main {
+  opacity: 1;
+}
+
+.skin-akash .main-body {
   max-width: 100vw;
   overflow-x: hidden;
 }
 
-.main-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-.container-main {
+.skin-akash .container-main {
   width: 100%;
   margin: auto;
   position: relative;
 }
 
-.container1 {
-  width: var(--cWidth);
-  height: var(--vh);
-  margin: auto;
-  position: relative;
-}
-
-.split-line {
+.skin-akash .split-line,
+.skin-akash .split-h2 {
   overflow: hidden;
 }
 
-.split-h2 {
-  overflow: hidden;
+.skin-akash .split-h2 {
   display: flex;
   white-space: nowrap;
   flex-wrap: nowrap;
 }
 
-.techstack {
+.skin-akash .techstack {
   width: 100%;
   position: relative;
   overflow: clip;
-  height: var(--vh);
-  margin: auto;
-  margin-top: 50px;
-  margin-bottom: -100px;
+  min-height: min(100svh, 720px);
+  height: auto;
+  margin: 50px auto 40px;
+  padding: 40px 0 80px;
 }
 
-.techstack h2 {
-  font-size: 80px;
+.skin-akash .techstack > h2 {
+  font-size: clamp(2rem, 6vw, 80px);
   text-align: center;
-  position: absolute;
+  position: relative;
   width: 100%;
-  top: 120px;
-  left: 0;
   font-weight: 400;
   text-transform: uppercase;
+  margin: 0 0 2rem;
+  z-index: 2;
 }
 
 @media screen and (min-width: 768px) {
-  html.skin-akash-active body,
+  html.skin-akash-active,
   .skin-akash {
     --cWidth: 94%;
   }
 }
 
 @media screen and (max-width: 900px) {
-  .techstack h2 {
+  .skin-akash .techstack > h2 {
     font-size: 40px;
   }
 }

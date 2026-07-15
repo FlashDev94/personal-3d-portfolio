@@ -34,10 +34,11 @@
 }
 .what-box-in {
   flex-direction: column;
-  height: 500px;
-  margin-left: 200px;
+  height: auto;
+  min-height: 280px;
+  margin-left: 0;
   position: relative;
-  display: none;
+  display: flex;
 }
 .what-content {
   width: 450px;
@@ -81,9 +82,7 @@
   opacity: 0.3;
 }
 .what-content-in {
-  opacity: 0;
-  animation: whatFlicker 0.5s 1 forwards;
-  animation-delay: 1s;
+  opacity: 1;
 }
 @keyframes whatFlicker {
   0%,
@@ -323,7 +322,7 @@
     line-height: 53px;
   }
   .what-box:first-child {
-    justify-content: left;
+    justify-content: flex-start;
   }
   .what-box:last-child {
     height: 500px;
@@ -377,8 +376,8 @@
 @media only screen and (max-width: 550px) {
   .whatIDO {
     place-items: inherit;
-    align-items: start;
-    justify-content: left;
+    align-items: flex-start;
+    justify-content: flex-start;
   }
   .what-box {
     max-width: calc(100% - 25px);

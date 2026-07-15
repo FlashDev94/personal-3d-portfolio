@@ -21,7 +21,7 @@
   list-style: none;
   column-gap: 40px;
   row-gap: 8px;
-  align-items: end;
+  align-items: flex-end;
 }
 .header ul li {
   margin-left: 0px;

@@ -20,7 +20,6 @@ import { useAkashIntro } from "./hooks/useAkashIntro";
 /** Akash visual skin — CSS class names + Geist/cyan look. */
 import "./skins/akash";
 
-/** Below-the-fold story sections — split out of the critical path. */
 const StoryAbout = lazy(() => import("./components/story/StoryAbout"));
 const StoryWhatIDo = lazy(() => import("./components/story/StoryWhatIDo"));
 const StoryCareer = lazy(() => import("./components/story/StoryCareer"));
@@ -32,15 +31,13 @@ const PortfolioConfigurator = lazy(
 );
 
 const SectionFallback = () => (
-  <div className="mx-auto min-h-[12rem] max-w-7xl animate-pulse px-6 py-10">
-    <div
-      className="h-4 w-32 rounded"
-      style={{ background: "var(--color-border, #333)" }}
-    />
-  </div>
+  <div
+    className="section-container"
+    style={{ minHeight: "8rem", padding: "2rem 0", opacity: 0.5 }}
+    aria-hidden
+  />
 );
 
-/** Theme-only: boot accent. Isolated so content tree is not re-rendered. */
 const BootScreenBridge = memo(function BootScreenBridge({
   ready,
   onFinished,
@@ -61,25 +58,29 @@ const BootScreenBridge = memo(function BootScreenBridge({
 });
 
 /**
- * Content shell — Akash MainContainer structure + our data platform.
+ * Option B shell: Akash skin + inline hero (no fixed character stage).
+ * Content always visible after boot — motion only enhances.
  */
 const PortfolioShell = () => {
   const { isHydrated } = usePortfolio();
+  const { theme3d } = useTheme3d();
   const [bootDone, setBootDone] = useState(false);
 
   const onBootFinished = useCallback(() => setBootDone(true), []);
   useStoryScroll(bootDone);
   useAkashIntro(bootDone);
 
-  // Mark html for skin-scoped global CSS
   useEffect(() => {
     document.documentElement.classList.add("skin-akash-active");
+    document.documentElement.dataset.heroScene = theme3d.heroScene;
+    document.documentElement.dataset.hybrid = "b";
     return () => {
       document.documentElement.classList.remove("skin-akash-active");
+      delete document.documentElement.dataset.heroScene;
+      delete document.documentElement.dataset.hybrid;
     };
-  }, []);
+  }, [theme3d.heroScene]);
 
-  // Absolute fail-safe: never leave the portfolio invisible if boot hangs
   useEffect(() => {
     if (bootDone) return;
     const t = window.setTimeout(() => setBootDone(true), 10000);
@@ -94,20 +95,15 @@ const PortfolioShell = () => {
 
       <BrowserRouter>
         <div
-          className={`container-main skin-akash main-body ${
-            bootDone ? "main-active" : ""
-          }`}
-          style={{
-            opacity: bootDone ? undefined : 0,
-            transition: "opacity 0.4s ease",
-          }}
+          className="container-main skin-akash main-body"
+          style={{ visibility: bootDone ? "visible" : "hidden" }}
           aria-hidden={!bootDone}
         >
           <CustomCursor />
           <StoryNavbar />
           <SocialRail />
           <SmoothScroll enabled={bootDone}>
-            <main className={`container-main ${bootDone ? "main-active" : ""}`}>
+            <main className="container-main">
               <StoryLanding />
               <Suspense fallback={<SectionFallback />}>
                 <StoryAbout />
