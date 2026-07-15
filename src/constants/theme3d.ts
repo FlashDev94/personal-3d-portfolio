@@ -9,8 +9,8 @@ import type {
 
 export const defaultTheme3d: TTheme3d = {
   enabled: true,
-  /** Classic workstation — the production-quality hero scene. */
-  heroScene: "desktop_pc",
+  /** Fixed scroll-led workstation stage (Option C hybrid). */
+  heroScene: "character_stage",
   contactScene: "planet",
   showStars: true,
   autoRotate: true,
@@ -220,6 +220,12 @@ export const HERO_SCENE_OPTIONS: {
     heavy: false,
   },
   {
+    id: "character_stage",
+    label: "Character stage",
+    description: "Fixed scroll-led workstation with mouse look (desktop).",
+    heavy: true,
+  },
+  {
     id: "neon_grid",
     label: "Neon Grid",
     description: "Perspective grid with fog — cyber aesthetic.",
@@ -296,7 +302,7 @@ export function clampTheme3d(partial: Partial<TTheme3d> | undefined): TTheme3d {
       ? (base.colorMode as ColorMode)
       : defaultTheme3d.colorMode,
     heroScene: (
-      ["desktop_pc", "abstract_core", "neon_grid", "none"] as HeroSceneId[]
+      ["desktop_pc", "abstract_core", "neon_grid", "character_stage", "none"] as HeroSceneId[]
     ).includes(base.heroScene as HeroSceneId)
       ? (base.heroScene as HeroSceneId)
       : defaultTheme3d.heroScene,

@@ -1,5 +1,5 @@
 import { lazy, PropsWithChildren, Suspense } from "react";
-import { usePortfolio } from "../../context/PortfolioContext";
+import { usePortfolio, useTheme3d } from "../../context/PortfolioContext";
 import ErrorBoundary from "../layout/ErrorBoundary";
 
 const HeroScene = lazy(() => import("../canvas/HeroScene"));
@@ -10,6 +10,7 @@ const HeroScene = lazy(() => import("../canvas/HeroScene"));
  */
 const StoryLanding = ({ children }: PropsWithChildren) => {
   const { data } = usePortfolio();
+  const { theme3d } = useTheme3d();
   const { config, services } = data;
 
   const nameParts = (config.hero.name || "Hello").trim().split(/\s+/);
@@ -51,17 +52,19 @@ const StoryLanding = ({ children }: PropsWithChildren) => {
         </div>
       </div>
 
-      {/* 3D hero stage — desktop fixed character slot (Option C deepens this) */}
-      <div className="story-hero-stage character-model" aria-hidden>
-        <ErrorBoundary
-          name="Story hero canvas"
-          fallback={<div className="h-full w-full" aria-hidden />}
-        >
-          <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
-            <HeroScene />
-          </Suspense>
-        </ErrorBoundary>
-      </div>
+      {/* Inline hero packs only — character_stage mounts fixed at shell (C) */}
+      {theme3d.heroScene !== "character_stage" ? (
+        <div className="story-hero-stage character-model" aria-hidden>
+          <ErrorBoundary
+            name="Story hero canvas"
+            fallback={<div className="h-full w-full" aria-hidden />}
+          >
+            <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
+              <HeroScene />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      ) : null}
       {children}
     </div>
   );

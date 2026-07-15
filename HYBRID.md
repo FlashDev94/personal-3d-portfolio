@@ -1,43 +1,32 @@
-# Hybrid Option B — Akash scroll-story skin
+# Hybrid Option C — Character-led scroll stage
 
-**Branch:** `feat/hybrid-b-scroll-story`  
-**Builds on:** Option A motion polish (`motionRuntime`, cursor, HoverLinks, SmoothScroll)
+**Branch:** `feat/hybrid-c-character-led`  
+**Builds on:** Option B (full Akash skin + scroll story)
 
-## What this is (distinct from A and C)
+## What this is (distinct from A and B)
 
-Faithful **visual + structural port** of [akashrmalhotra/3d-portfolio](https://github.com/akashrmalhotra/3d-portfolio):
+Same **Akash skin/DOM** as B, plus a **fixed lead-actor 3D stage** driven by scroll — the missing core of the reference’s `Character` + `GsapScroll.setCharTimeline`:
 
-| Reference piece | Our implementation |
-|-----------------|-------------------|
-| Geist + cyan tokens, section CSS | `src/skins/akash/*` (Landing, WhatIDo, Career, Work, Contact, Navbar, Social…) |
-| Landing dual-line role loop | `StoryLanding` + `useAkashIntro` (SplitText-free char stagger) |
-| What I Do dashed cards | `StoryWhatIDo` exact DOM (`.whatIDO`, `.what-content`, SVG borders) |
-| Career scrub timeline | `StoryCareer` + `useStoryScroll` (`setAllTimeline` port) |
-| Work carousel | `StoryWork` (`.carousel-*` classes, react-icons arrows) |
-| Social rail + header | `SocialRail`, `StoryNavbar` |
-| Contact footer grid | `StoryContact` |
-| ScrollSmoother | `SmoothScroll` (graceful fallback) |
-| Fixed character bone timeline | **Not on B** — see Option C |
-| Encrypted character mesh | **Never shipped** (policy) |
+| Feature | B | C |
+|---------|---|---|
+| Akash CSS skin + section DOM | ✅ | ✅ |
+| Intro FX + career scrub | ✅ | ✅ |
+| Fixed `position:fixed` stage outside scroll content | ❌ | ✅ |
+| Mouse look (yaw/pitch) | ❌ | ✅ |
+| Multi-section camera path (landing → about → whatIDO) | ❌ | ✅ |
+| DOM stage slide/exit (`.character-model-fixed`, rim fade) | ❌ | ✅ |
+| Encrypted personal mesh | never | never (uses your `desktop_pc`) |
 
-All copy/media still comes from `PortfolioContext` / configurator.
+Default `theme3d.heroScene = "character_stage"`. Switch back to `desktop_pc` / packs in Customize if you want the classic hero.
 
 ## Run
 ```bash
-git checkout feat/hybrid-b-scroll-story
+git checkout feat/hybrid-c-character-led
 npm install
 npm run dev
 ```
 
-## Kill-switches
-`motionRuntime`: e2e, reduced-motion, touch → no cursor / scrub / smoother / heavy FX.
+Desktop-only stage (touch / narrow / e2e / reduced-motion kill-switches via `motionRuntime`).
 
 ## Platform preserved
-Configurator FAB, multi-profile, history, multi-tab conflict recovery, theme packs.
-
-## Compare
-| | A | B | C |
-|--|---|---|---|
-| Layout | Original Tailwind sections | **Akash CSS + DOM** | Akash + character stage |
-| Motion | Polish on classic layout | Scrub storytelling (content) | Scrub + camera/look-at bone |
-| Skin | Tailwind tokens | Geist/cyan skin | Same skin as B + 3D lead |
+Configurator, multi-profile, history, multi-tab recovery.

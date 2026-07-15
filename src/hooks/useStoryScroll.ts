@@ -23,8 +23,12 @@ export function useStoryScroll(enabled: boolean) {
     }
 
     const ctx = gsap.context(() => {
+      // Option C: character stage owns landing/about/what DOM scrubs (theme flag is race-safe).
+      const charLed =
+        document.documentElement.dataset.heroScene === "character_stage";
+
       // Landing fade (reference tl1 content-only half)
-      if (document.querySelector(".landing-container")) {
+      if (!charLed && document.querySelector(".landing-container")) {
         gsap
           .timeline({
             scrollTrigger: {
@@ -62,7 +66,7 @@ export function useStoryScroll(enabled: boolean) {
       }
 
       // About parallax fade
-      if (document.querySelector(".about-section")) {
+      if (!charLed && document.querySelector(".about-section")) {
         gsap
           .timeline({
             scrollTrigger: {
@@ -79,7 +83,7 @@ export function useStoryScroll(enabled: boolean) {
       }
 
       // Reveal What I Do cards (reference shows them mid-scroll)
-      if (document.querySelector(".what-box-in")) {
+      if (!charLed && document.querySelector(".what-box-in")) {
         if (policy.isDesktop) {
           gsap
             .timeline({

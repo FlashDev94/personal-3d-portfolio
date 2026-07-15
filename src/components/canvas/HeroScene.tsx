@@ -27,6 +27,11 @@ const HeroScene = () => {
     return null;
   }
 
+  // Fixed scroll-led stage mounts at shell level (CharacterStagePortal).
+  if (theme3d.heroScene === "character_stage") {
+    return null;
+  }
+
   const common = {
     autoRotate: runtime.autoRotate,
     motionSpeed: runtime.motionSpeed || 1,

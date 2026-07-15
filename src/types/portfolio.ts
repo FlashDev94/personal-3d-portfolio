@@ -46,6 +46,7 @@ export type HeroSceneId =
   | "desktop_pc"
   | "abstract_core"
   | "neon_grid"
+  | "character_stage"
   | "none";
 
 /** Contact 3D pack ids. */

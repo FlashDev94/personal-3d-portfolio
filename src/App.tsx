@@ -14,6 +14,7 @@ import SmoothScroll from "./components/motion/SmoothScroll";
 import StoryLanding from "./components/story/StoryLanding";
 import StoryNavbar from "./components/story/StoryNavbar";
 import SocialRail from "./components/story/SocialRail";
+import CharacterStagePortal from "./components/canvas/CharacterStagePortal";
 import { useStoryScroll } from "./hooks/useStoryScroll";
 import { useAkashIntro } from "./hooks/useAkashIntro";
 
@@ -65,19 +66,22 @@ const BootScreenBridge = memo(function BootScreenBridge({
  */
 const PortfolioShell = () => {
   const { isHydrated } = usePortfolio();
+  const { theme3d } = useTheme3d();
   const [bootDone, setBootDone] = useState(false);
 
   const onBootFinished = useCallback(() => setBootDone(true), []);
   useStoryScroll(bootDone);
   useAkashIntro(bootDone);
 
-  // Mark html for skin-scoped global CSS
+  // Mark html for skin-scoped global CSS + hero scene flag for scroll owners
   useEffect(() => {
     document.documentElement.classList.add("skin-akash-active");
+    document.documentElement.dataset.heroScene = theme3d.heroScene;
     return () => {
       document.documentElement.classList.remove("skin-akash-active");
+      delete document.documentElement.dataset.heroScene;
     };
-  }, []);
+  }, [theme3d.heroScene]);
 
   // Absolute fail-safe: never leave the portfolio invisible if boot hangs
   useEffect(() => {
@@ -104,6 +108,7 @@ const PortfolioShell = () => {
           aria-hidden={!bootDone}
         >
           <CustomCursor />
+          <CharacterStagePortal active={bootDone} />
           <StoryNavbar />
           <SocialRail />
           <SmoothScroll enabled={bootDone}>
