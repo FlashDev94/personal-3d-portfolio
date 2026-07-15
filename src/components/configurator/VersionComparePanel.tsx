@@ -22,11 +22,25 @@ const btnGhost =
 /** Synthetic snapshot ids for draft / live endpoints in the picker. */
 export const COMPARE_LIVE_ID = "__live__";
 export const COMPARE_DRAFT_ID = "__draft__";
+/** Peer tab's draft captured during a multi-tab conflict. */
+export const COMPARE_PEER_DRAFT_ID = "__peer_draft__";
+
+export type CompareExtraSnapshot = {
+  id: string;
+  label: string;
+  data: TPortfolioData;
+};
 
 export type VersionComparePanelProps = {
   versions: VersionEntry[];
   live: TPortfolioData;
   draft: TPortfolioData;
+  /** Extra endpoints (e.g. peer draft from another tab). */
+  extraSnapshots?: CompareExtraSnapshot[];
+  /** Initial "from" picker id (e.g. COMPARE_DRAFT_ID). */
+  initialFromId?: string;
+  /** Initial "to" picker id (e.g. COMPARE_LIVE_ID or COMPARE_PEER_DRAFT_ID). */
+  initialToId?: string;
   /**
    * Merge selected compare-side values into the configurator draft only.
    * Must record an immediate undo step; must NOT commit live / multi-tab.
@@ -51,7 +65,8 @@ function resolveSnapshot(
   id: string,
   versions: VersionEntry[],
   live: TPortfolioData,
-  draft: TPortfolioData
+  draft: TPortfolioData,
+  extras: CompareExtraSnapshot[] = []
 ): { data: TPortfolioData; label: string } | null {
   if (id === COMPARE_LIVE_ID) {
     return {
@@ -63,6 +78,13 @@ function resolveSnapshot(
     return {
       data: { ...draft, theme3d: clampTheme3d(draft.theme3d) },
       label: "Current draft",
+    };
+  }
+  const extra = extras.find((e) => e.id === id);
+  if (extra) {
+    return {
+      data: { ...extra.data, theme3d: clampTheme3d(extra.data.theme3d) },
+      label: extra.label,
     };
   }
   const entry = versions.find((v) => v.id === id);
@@ -92,6 +114,9 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
   versions,
   live,
   draft,
+  extraSnapshots = [],
+  initialFromId,
+  initialToId,
   onApplyToDraft,
   onStatus,
   onError,
@@ -101,12 +126,20 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
     versions.length > 1 ? versions[versions.length - 2].id : COMPARE_LIVE_ID;
 
   const [fromId, setFromId] = useState<string>(
-    () => secondNewestId || COMPARE_LIVE_ID
+    () => initialFromId || secondNewestId || COMPARE_LIVE_ID
   );
-  const [toId, setToId] = useState<string>(() => newestId || COMPARE_DRAFT_ID);
+  const [toId, setToId] = useState<string>(
+    () => initialToId || newestId || COMPARE_DRAFT_ID
+  );
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   /** Recompute token so users can re-diff after draft edits without remount. */
   const [diffGen, setDiffGen] = useState(0);
+
+  // When recovery flow opens compare with a specific pair, honor late props.
+  React.useEffect(() => {
+    if (initialFromId) setFromId(initialFromId);
+    if (initialToId) setToId(initialToId);
+  }, [initialFromId, initialToId]);
 
   const options = useMemo(() => {
     // Dedupe by id (newest wins) so React keys and restore targets stay stable
@@ -121,22 +154,29 @@ export const VersionComparePanel: React.FC<VersionComparePanelProps> = ({
         label: `${v.label} · ${formatWhen(v.at)}`,
       });
     }
+    const extras = extraSnapshots
+      .filter((e) => e?.id && !seen.has(e.id))
+      .map((e) => {
+        seen.add(e.id);
+        return { id: e.id, label: e.label };
+      });
     return [
       { id: COMPARE_LIVE_ID, label: "Live portfolio (applied)" },
       { id: COMPARE_DRAFT_ID, label: "Current draft (unsaved)" },
+      ...extras,
       ...versionOpts,
     ];
-  }, [versions]);
+  }, [versions, extraSnapshots]);
 
   // diffGen forces re-resolve after a merge so draft endpoint reflects new state
   const fromSnap = useMemo(() => {
     void diffGen;
-    return resolveSnapshot(fromId, versions, live, draft);
-  }, [fromId, versions, live, draft, diffGen]);
+    return resolveSnapshot(fromId, versions, live, draft, extraSnapshots);
+  }, [fromId, versions, live, draft, extraSnapshots, diffGen]);
   const toSnap = useMemo(() => {
     void diffGen;
-    return resolveSnapshot(toId, versions, live, draft);
-  }, [toId, versions, live, draft, diffGen]);
+    return resolveSnapshot(toId, versions, live, draft, extraSnapshots);
+  }, [toId, versions, live, draft, extraSnapshots, diffGen]);
 
   const entries = useMemo(() => {
     if (!fromSnap || !toSnap) return [] as PortfolioDiffEntry[];

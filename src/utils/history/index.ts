@@ -6,3 +6,4 @@ export * from "./multiTabSync";
 export * from "./versionHistory";
 export * from "./draftPersist";
 export * from "./diff";
+export * from "./tabConflict";

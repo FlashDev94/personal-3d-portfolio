@@ -31,13 +31,28 @@ import {
 } from "../../constants/theme3d";
 import { useDraftHistory } from "../../hooks/useDraftHistory";
 import {
+  appendVersion,
+  buildTabConflict,
   clonePortfolio,
+  conflictFromPeerDraft,
+  isForeignTab,
   loadPersistedDraft,
   parsePortfolioJson,
   portfolioFingerprint,
+  recoverySnapshotLabel,
+  savePersistedDraft,
+  shouldSurfaceConflict,
+  subscribePortfolioSync,
   type DraftCommitOptions,
+  type TabConflict,
 } from "../../utils/history";
-import { VersionComparePanel } from "./VersionComparePanel";
+import { profileDraftKey } from "../../utils/profiles/types";
+import {
+  COMPARE_DRAFT_ID,
+  COMPARE_LIVE_ID,
+  COMPARE_PEER_DRAFT_ID,
+  VersionComparePanel,
+} from "./VersionComparePanel";
 import { ProfileSwitcher } from "../ProfileSwitcher";
 
 const TABS: { id: ConfiguratorTab; label: string }[] = [
@@ -127,6 +142,9 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     refreshVersions,
     activeProfileId,
     isPreviewMode,
+    storageHealth,
+    refreshStorageHealth,
+    recoverBrowserStorage,
   } = usePortfolioAll();
 
   // Capture live portfolio only on first mount (panel is remounted per profile
@@ -167,6 +185,20 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Peer-tab draft conflict (applied conflicts use remoteUpdate from context). */
+  const [draftConflict, setDraftConflict] = useState<TabConflict | null>(null);
+  /** Compare panel presets when recovery opens History. */
+  const [comparePreset, setComparePreset] = useState<{
+    fromId: string;
+    toId: string;
+    peerDraft?: TPortfolioData;
+    peerLabel?: string;
+  } | null>(null);
+
+  const draftFpRef = useRef(portfolioFingerprint(draft));
+  draftFpRef.current = portfolioFingerprint(draft);
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
 
   /** Structural / heavy edits — one undo step each, available immediately. */
   const commit = useCallback(
@@ -201,9 +233,154 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       { baseFingerprint: liveFingerprint }
     );
     acknowledgeRemoteUpdate();
+    setDraftConflict(null);
+    setComparePreset(null);
     setStatus("Draft reloaded from the live portfolio.");
     setError(null);
   };
+
+  const clearConflicts = useCallback(() => {
+    acknowledgeRemoteUpdate();
+    setDraftConflict(null);
+  }, [acknowledgeRemoteUpdate]);
+
+  /** Save current draft into version history before taking the other side. */
+  const preserveDraftInHistory = useCallback(
+    (label?: string) => {
+      const entryLabel = recoverySnapshotLabel(label);
+      const { entry, persisted } = appendVersion(draft, entryLabel);
+      refreshVersions();
+      return {
+        ok: persisted,
+        versionId: entry.id,
+        label: entry.label,
+      };
+    },
+    [draft, refreshVersions]
+  );
+
+  const adoptPeerDraft = useCallback(
+    (conflict: TabConflict, opts?: { preserveMine?: boolean }) => {
+      if (!conflict.peerDraft) {
+        setError("Peer draft is no longer available in browser storage.");
+        return;
+      }
+      if (opts?.preserveMine) {
+        const snap = preserveDraftInHistory(
+          "My draft before adopting other tab"
+        );
+        if (!snap.ok) {
+          setStatus(
+            "Could not snapshot your draft to history (storage full). Adopting peer draft anyway — export JSON first if unsure."
+          );
+        }
+      }
+      const peer = {
+        ...conflict.peerDraft,
+        theme3d: clampTheme3d(conflict.peerDraft.theme3d),
+      };
+      // Align base to current live so dirty/apply semantics match this tab.
+      const baseFp = liveFingerprint;
+      // resetDraft clears undo stacks + draft key; re-persist peer as our draft
+      resetDraft(peer, { baseFingerprint: baseFp });
+      savePersistedDraft(peer, baseFp, activeProfileId);
+      clearConflicts();
+      setComparePreset(null);
+      setStatus(
+        "Loaded the other tab’s draft (icons, 3D settings, and copy preserved). Review and Apply when ready."
+      );
+      setError(null);
+    },
+    [
+      activeProfileId,
+      clearConflicts,
+      liveFingerprint,
+      preserveDraftInHistory,
+      resetDraft,
+    ]
+  );
+
+  const openConflictCompare = useCallback(
+    (kind: "applied" | "draft") => {
+      if (kind === "draft" && draftConflict?.peerDraft) {
+        setComparePreset({
+          fromId: COMPARE_DRAFT_ID,
+          toId: COMPARE_PEER_DRAFT_ID,
+          peerDraft: draftConflict.peerDraft,
+          peerLabel: "Other tab’s draft",
+        });
+      } else {
+        setComparePreset({
+          fromId: COMPARE_DRAFT_ID,
+          toId: COMPARE_LIVE_ID,
+        });
+      }
+      setTab("history");
+      setStatus(
+        "Compare your draft with the other tab. Merge selected fields (including icons and 3D) into the draft — live site stays unchanged until Apply."
+      );
+    },
+    [draftConflict]
+  );
+
+  // Detect peer draft conflicts via BroadcastChannel + storage events
+  useEffect(() => {
+    if (!activeProfileId) return;
+
+    const considerPeer = (label?: string) => {
+      const conflict = conflictFromPeerDraft({
+        profileId: activeProfileId,
+        localDraftFp: draftFpRef.current,
+        liveFp: liveFingerprint,
+        isDirty: isDirtyRef.current,
+        peer: loadPersistedDraft(activeProfileId),
+        label,
+      });
+      if (conflict) setDraftConflict(conflict);
+    };
+
+    const unsub = subscribePortfolioSync((msg) => {
+      if (!isForeignTab(msg)) return;
+      if (msg.type !== "draft") return;
+      if (msg.profileId !== activeProfileId) return;
+      if (
+        !shouldSurfaceConflict({
+          profileId: activeProfileId,
+          localDraftFp: draftFpRef.current,
+          liveFp: liveFingerprint,
+          isDirty: isDirtyRef.current,
+          remoteFp: msg.fingerprint,
+          kind: "draft",
+        })
+      ) {
+        return;
+      }
+      // Load full peer payload from shared storage (message is fingerprint-only)
+      considerPeer("Draft changed in another tab");
+    });
+
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.storageArea !== localStorage) return;
+      if (ev.key !== profileDraftKey(activeProfileId)) return;
+      if (!ev.newValue) return;
+      considerPeer("Draft changed in another tab");
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      unsub();
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [activeProfileId, liveFingerprint]);
+
+  // Refresh storage health when opening the panel (once per mount)
+  useEffect(() => {
+    try {
+      refreshStorageHealth();
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+  }, []);
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -356,7 +533,7 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     if (!remoteUpdate || remoteRev == null) return;
     if (isDirty) {
       setStatus(
-        `Another tab applied “${remoteUpdate.label || "changes"}”. Your draft is preserved — reload from live or keep editing.`
+        `Another tab applied “${remoteUpdate.label || "changes"}”. Your draft is preserved — compare, keep yours, or reload from live.`
       );
       return;
     }
@@ -366,11 +543,30 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       { baseFingerprint: remoteUpdate.fingerprint || liveFingerprint }
     );
     acknowledgeRemoteUpdate();
+    setDraftConflict(null);
     setStatus(
       `Synced live portfolio from another tab (${remoteUpdate.label || "update"}).`
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- remoteRev gates new events; isDirty re-check on clean-up path
   }, [remoteRev, isDirty]);
+
+  const appliedConflict: TabConflict | null =
+    remoteUpdate && isDirty
+      ? buildTabConflict({
+          kind: "applied",
+          profileId: remoteUpdate.profileId || activeProfileId,
+          localDraftFp: draftFpRef.current,
+          liveFp: liveFingerprint,
+          isDirty: true,
+          remoteFp: remoteUpdate.fingerprint,
+          label: remoteUpdate.label,
+          rev: remoteUpdate.rev,
+          at: remoteUpdate.at,
+        })
+      : null;
+
+  // Prefer showing applied conflict; draft conflict is secondary
+  const activeConflict = appliedConflict || draftConflict;
 
   return (
         <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
@@ -392,9 +588,11 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <span className="ml-1 font-semibold text-amber-300">
                       Preview mode — apply disabled
                     </span>
-                  ) : remoteUpdate ? (
+                  ) : activeConflict ? (
                     <span className="ml-1 font-semibold text-amber-300">
-                      Live site updated in another tab
+                      {activeConflict.kind === "applied"
+                        ? "Live site updated in another tab"
+                        : "Draft conflict with another tab"}
                     </span>
                   ) : isDirty ? (
                     <span className="ml-1 font-semibold text-amber-300">Unsaved draft</span>
@@ -443,23 +641,100 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             </header>
 
-            {remoteUpdate && (
+            {activeConflict && (
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-100">
-                <span>
-                  Live portfolio changed in another tab
-                  {remoteUpdate.label ? ` (${remoteUpdate.label})` : ""}.
-                  {isDirty
-                    ? " Your draft is preserved until you reload or keep editing."
-                    : " Draft will sync automatically, or reload now."}
+                <span className="min-w-0 flex-1">
+                  {activeConflict.kind === "applied" ? (
+                    <>
+                      Live portfolio changed in another tab
+                      {activeConflict.label
+                        ? ` (“${activeConflict.label}”)`
+                        : ""}
+                      . Your unsaved draft is preserved — compare fields
+                      (including icons &amp; 3D), keep yours, or take live.
+                    </>
+                  ) : (
+                    <>
+                      Another tab saved a different draft for this profile
+                      {activeConflict.peerDraftUpdatedAt
+                        ? ` (${formatWhen(activeConflict.peerDraftUpdatedAt)})`
+                        : ""}
+                      . Compare both drafts or pick one. Imports, uploaded
+                      assets, history, and 3D settings stay intact either way.
+                    </>
+                  )}
                 </span>
-                <div className="flex gap-2">
-                  <button type="button" className={btnGhost} onClick={discardDraftToLive}>
-                    Reload from live
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    onClick={() => openConflictCompare(activeConflict.kind)}
+                  >
+                    Compare &amp; recover
+                  </button>
+                  {activeConflict.kind === "applied" ? (
+                    <>
+                      <button
+                        type="button"
+                        className={btnGhost}
+                        onClick={() => {
+                          const snap = preserveDraftInHistory(
+                            "My draft before reloading live"
+                          );
+                          discardDraftToLive();
+                          setStatus(
+                            snap.ok
+                              ? `Reloaded live. Your previous draft is in History as “${snap.label}”.`
+                              : "Reloaded live. Could not snapshot previous draft (storage full)."
+                          );
+                        }}
+                      >
+                        Take live (keep mine in history)
+                      </button>
+                      <button
+                        type="button"
+                        className={btnGhost}
+                        onClick={discardDraftToLive}
+                      >
+                        Take live
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={btnGhost}
+                      onClick={() =>
+                        adoptPeerDraft(activeConflict, { preserveMine: true })
+                      }
+                      disabled={!activeConflict.peerDraft}
+                    >
+                      Take other draft
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    onClick={() => {
+                      // Force-write local draft so we reclaim the shared key from the peer
+                      if (isDirty) {
+                        savePersistedDraft(
+                          draft,
+                          liveFingerprint,
+                          activeProfileId
+                        );
+                      }
+                      clearConflicts();
+                      setStatus(
+                        "Keeping your local draft. Apply when ready to publish to other tabs."
+                      );
+                    }}
+                  >
+                    Keep mine
                   </button>
                   <button
                     type="button"
                     className={btnGhost}
-                    onClick={() => acknowledgeRemoteUpdate()}
+                    onClick={() => clearConflicts()}
                   >
                     Dismiss
                   </button>
@@ -496,6 +771,54 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     {error}
                   </div>
                 )}
+
+                {storageHealth &&
+                  (storageHealth.level === "warn" ||
+                    storageHealth.level === "critical" ||
+                    storageHealth.level === "full" ||
+                    storageHealth.orphanAssetCount > 0 ||
+                    storageHealth.orphanKeyCount > 0) && (
+                    <div
+                      className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+                        storageHealth.level === "full" ||
+                        storageHealth.level === "critical"
+                          ? "border-amber-400/40 bg-amber-500/10 text-amber-100"
+                          : "border-white/15 bg-white/5 text-secondary"
+                      }`}
+                    >
+                      <p className="font-medium text-white">
+                        Browser storage{" "}
+                        {storageHealth.level === "full"
+                          ? "is full"
+                          : storageHealth.level === "critical"
+                            ? "is nearly full"
+                            : "is filling up"}{" "}
+                        (~{Math.round(storageHealth.usageRatio * 100)}% used)
+                      </p>
+                      <p className="mt-1 text-xs">
+                        Recovery prefers orphan GC and idle drafts so active
+                        profiles, uploaded assets, history, and 3D settings stay
+                        intact when possible.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnGhost}
+                          onClick={() => {
+                            const report = recoverBrowserStorage(true);
+                            refreshStorageHealth();
+                            setStatus(
+                              report.level === "ok" || report.level === "warn"
+                                ? `Storage recovered (${report.level}). Orphan assets: ${report.orphanAssetCount}.`
+                                : `Storage still ${report.level}. Remove unused profiles or history if saves fail.`
+                            );
+                          }}
+                        >
+                          Repair &amp; free space
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 {tab === "profiles" && (
                   <div className="space-y-4">
@@ -1836,8 +2159,33 @@ const ConfiguratorPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                         versions={versions}
                         live={data}
                         draft={draft}
+                        extraSnapshots={
+                          comparePreset?.peerDraft
+                            ? [
+                                {
+                                  id: COMPARE_PEER_DRAFT_ID,
+                                  label:
+                                    comparePreset.peerLabel ||
+                                    "Other tab’s draft",
+                                  data: comparePreset.peerDraft,
+                                },
+                              ]
+                            : draftConflict?.peerDraft
+                              ? [
+                                  {
+                                    id: COMPARE_PEER_DRAFT_ID,
+                                    label: "Other tab’s draft",
+                                    data: draftConflict.peerDraft,
+                                  },
+                                ]
+                              : []
+                        }
+                        initialFromId={comparePreset?.fromId}
+                        initialToId={comparePreset?.toId}
                         onApplyToDraft={(next, label) => {
                           commit(() => next, label);
+                          // After selective merge, conflict may still apply —
+                          // user can dismiss or keep merging.
                         }}
                         onStatus={setStatus}
                         onError={setError}

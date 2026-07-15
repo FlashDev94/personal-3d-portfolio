@@ -60,7 +60,44 @@ export type SyncMessage =
       type: "profiles";
       tabId: string;
       rev: number;
+    }
+  | {
+      /** Peer tab persisted an unsaved draft for a profile. */
+      type: "draft";
+      tabId: string;
+      rev: number;
+      profileId: string;
+      fingerprint: string;
+      updatedAt: number;
+      baseFingerprint?: string;
+    }
+  | {
+      /** Another tab reclaimed storage / repaired consistency. */
+      type: "storage-health";
+      tabId: string;
+      rev: number;
+      level?: string;
     };
+
+/**
+ * Cross-tab conflict on the active profile: peer applied live changes and/or
+ * overwrote the shared draft key while this tab still has local edits.
+ */
+export type TabConflictKind = "applied" | "draft";
+
+export type TabConflict = {
+  rev: number;
+  at: number;
+  kind: TabConflictKind;
+  profileId: string;
+  label?: string;
+  /** Fingerprint of the remote side (live applied or peer draft). */
+  fingerprint: string;
+  /** Peer draft payload when kind === "draft" (resolved icons). */
+  peerDraft?: TPortfolioData;
+  peerDraftUpdatedAt?: number;
+  peerBaseFingerprint?: string;
+};
 
 export const HISTORY_LIMITS = {
   maxUndo: 40,
