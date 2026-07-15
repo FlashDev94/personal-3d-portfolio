@@ -2,9 +2,15 @@ import { useEffect, useRef } from "react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { usePortfolio } from "../../context/PortfolioContext";
 
+/** Short, non-overlapping tags per card — avoid dumping the full tech list. */
+const FALLBACK_TAGS: string[][] = [
+  ["Product UI", "Design systems", "Accessibility", "React", "TypeScript"],
+  ["APIs", "Cloud", "Databases", "Automation", "Delivery"],
+];
+
 const StoryWhatIDo = () => {
   const { data } = usePortfolio();
-  const services = data.services.slice(0, 4);
+  const services = data.services.slice(0, 2);
   const technologies = data.technologies;
   const containerRef = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -35,10 +41,11 @@ const StoryWhatIDo = () => {
 
   if (!services.length) return null;
 
-  // Show first two services in the dual-card layout (Akash design is 2 cards)
-  const cards = services.slice(0, 2);
-  // Distribute tech tags across cards
-  const mid = Math.ceil(technologies.length / 2) || 1;
+  // Pick a small unique slice of tech names for tags (max 5), split across cards
+  const techNames = technologies
+    .map((t) => t.name)
+    .filter(Boolean)
+    .filter((n, i, arr) => arr.indexOf(n) === i);
 
   return (
     <div className="whatIDO" id="services">
@@ -53,7 +60,7 @@ const StoryWhatIDo = () => {
       <div className="what-box">
         <div className="what-box-in">
           <div className="what-border2">
-            <svg width="100%">
+            <svg width="100%" aria-hidden>
               <line
                 x1="0"
                 y1="0"
@@ -74,15 +81,16 @@ const StoryWhatIDo = () => {
               />
             </svg>
           </div>
-          {cards.map((service, i) => {
+          {services.map((service, i) => {
             const tags =
-              i === 0
-                ? technologies.slice(0, mid).map((t) => t.name)
-                : technologies.slice(mid).map((t) => t.name);
-            const tagList =
-              tags.length > 0
-                ? tags.slice(0, 7)
-                : [service.title, "Engineering", "Delivery"];
+              techNames.length >= 4
+                ? i === 0
+                  ? techNames.slice(0, 5)
+                  : techNames.slice(5, 10).length
+                    ? techNames.slice(5, 10)
+                    : FALLBACK_TAGS[1]
+                : FALLBACK_TAGS[i] || FALLBACK_TAGS[0];
+
             return (
               <div
                 key={service.title + i}
@@ -90,7 +98,7 @@ const StoryWhatIDo = () => {
                 ref={(el) => setRef(el, i)}
               >
                 <div className="what-border1">
-                  <svg height="100%">
+                  <svg height="100%" aria-hidden>
                     <line
                       x1="0"
                       y1="0"
@@ -122,11 +130,11 @@ const StoryWhatIDo = () => {
                   <p>
                     {i === 0
                       ? `Specializing in ${service.title.toLowerCase()} — from strategy and design to hands-on implementation.`
-                      : `Building reliable systems and interfaces with a focus on ${service.title.toLowerCase()}.`}
+                      : `Building reliable systems with a focus on ${service.title.toLowerCase()}.`}
                   </p>
                   <h5>Skillset & tools</h5>
                   <div className="what-content-flex">
-                    {tagList.map((tag) => (
+                    {tags.map((tag) => (
                       <div className="what-tags" key={tag}>
                         {tag}
                       </div>

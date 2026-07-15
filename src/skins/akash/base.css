@@ -74,11 +74,11 @@ html.skin-akash-active body {
 .skin-akash .techstack {
   width: 100%;
   position: relative;
-  overflow: clip;
-  min-height: min(100svh, 720px);
+  overflow: visible;
+  min-height: 0;
   height: auto;
-  margin: 50px auto 40px;
-  padding: 40px 0 80px;
+  margin: 40px auto 20px;
+  padding: 48px 0 72px;
 }
 
 .skin-akash .techstack > h2 {
