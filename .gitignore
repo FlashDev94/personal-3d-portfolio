@@ -32,3 +32,10 @@ dist-ssr
 
 # Playwright MCP local artifacts
 .playwright-mcp/
+
+# Test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.nyc_output/

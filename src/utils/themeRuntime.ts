@@ -5,6 +5,7 @@ import {
   resolveThemeTokens,
   type QualityProfile,
 } from "../constants/theme3d";
+import { isE2EMode } from "./e2eMode";
 
 export function usePrefersReducedMotion(): boolean {
   const [prefers, setPrefers] = useState(false);
@@ -35,13 +36,19 @@ export function useThemeRuntime(theme: TTheme3d) {
   const systemReduced = usePrefersReducedMotion();
 
   return useMemo(() => {
-    const reduceMotion = resolveReduceMotion(theme, systemReduced);
+    // E2E harness: skip WebGL so multi-tab / configurator UAT stays interactive.
+    const e2e = isE2EMode();
+    const reduceMotion =
+      e2e || resolveReduceMotion(theme, systemReduced);
     const quality: QualityProfile = QUALITY_PROFILES[theme.quality];
     const tokens = resolveThemeTokens(theme);
     const base = quality.particleCount;
     const count = Math.round(base * theme.starsDensity);
-    const particleCount = Math.max(200, Math.min(4000, count));
-    const autoRotate = theme.autoRotate && !reduceMotion && theme.enabled;
+    const particleCount = e2e
+      ? 0
+      : Math.max(200, Math.min(4000, count));
+    const autoRotate =
+      theme.autoRotate && !reduceMotion && theme.enabled && !e2e;
     const motionSpeed = reduceMotion ? 0 : theme.motionSpeed;
 
     return {
@@ -62,10 +69,10 @@ export function useThemeRuntime(theme: TTheme3d) {
       autoRotate,
       motionSpeed,
       dpr: quality.dpr,
-      shadows: quality.shadows && theme.quality !== "low",
-      antialias: quality.antialias,
-      allowOrbit: theme.allowOrbit && !reduceMotion,
-      webglEnabled: theme.enabled,
+      shadows: quality.shadows && theme.quality !== "low" && !e2e,
+      antialias: quality.antialias && !e2e,
+      allowOrbit: theme.allowOrbit && !reduceMotion && !e2e,
+      webglEnabled: theme.enabled && !e2e,
     };
   }, [theme, systemReduced]);
 }
